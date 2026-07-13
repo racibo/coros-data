@@ -320,6 +320,30 @@ async def load_google_sheets() -> dict[str, dict]:
         if weather_note:
             map_[ds]["weatherNote"] = weather_note.strip()
 
+    # Open-Meteo fallback (Gdańsk) if no weather from sheet
+    if not wth_raw or not any(rd.get("temp") or rd.get("rain") for rd in map_.values()):
+        try:
+            dates = sorted(d for d in map_.keys() if d.count("-")==2)
+            if len(dates)>=2:
+                s, e = dates[0], dates[-1]
+                om_url = f"https://archive-api.open-meteo.com/v1/archive?latitude=54.35&longitude=18.65&start_date={s}&end_date={e}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Europe/Warsaw"
+                async with httpx.AsyncClient(timeout=30) as omc:
+                    omr = await omc.get(om_url)
+                    if omr.is_success:
+                        omj = omr.json()
+                        for i, day in enumerate(omj.get("daily", {}).get("time", [])):
+                            tmax = omj["daily"].get("temperature_2m_max", [None])[i]
+                            tmin = omj["daily"].get("temperature_2m_min", [None])[i]
+                            precip = omj["daily"].get("precipitation_sum", [None])[i]
+                            if day in map_:
+                                if tmax is not None and tmin is not None:
+                                    map_[day]["temp"] = round((tmax + tmin) / 2, 1)
+                                if precip is not None:
+                                    map_[day]["rain"] = "tak" if precip > 0 else "nie"
+                                    map_[day]["rainMm"] = precip
+        except Exception:
+            pass
+
     # Body sheet (weight)
     for r in bod_raw:
         k = ensure(parse_date(get_val(r, "date") or get_val(r, "time")))

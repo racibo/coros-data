@@ -314,33 +314,61 @@ function calcMoonPhase(dateStr) {
   return { phase: phaseName, label: phaseLabel, illumination: Math.round(illumination*100), age: phaseAge };
 }
 
-// ── Weather sheet ────────────────────────────────
+// ── Weather: Google Sheet → fallback Open-Meteo (Gdańsk) ──
 async function loadWeatherSheet() {
-  var url = "https://docs.google.com/spreadsheets/d/"+WEATHER_SHEET_ID+"/export?format=csv&gid="+SHEETS.weather;
+  // 1) Try Google Sheet
   try {
+    var url = "https://docs.google.com/spreadsheets/d/"+WEATHER_SHEET_ID+"/export?format=csv&gid="+SHEETS.weather;
     var resp = await fetch(url);
-    if(!resp.ok) return null;
-    var text = await resp.text();
-    var lines = text.split("\n").filter(function(l){return l.trim();});
-    if(lines.length<2) return null;
-    var headers = lines[0].split(",").map(function(h){return h.trim().replace(/^"+|"+$/g,'');});
-    var map = {};
-    for(var i=1;i<lines.length;i++){
-      var vals = lines[i].split(",").map(function(v){return v.trim().replace(/^"+|"+$/g,'');});
-      var row = {};
-      for(var j=0;j<headers.length;j++) row[headers[j]] = vals[j]||'';
-      var ds = row.date || row.data || row.Date || '';
-      if(ds){
-        // normalize date format
-        var parts = ds.match(/(\d{4})-(\d{2})-(\d{2})/);
-        if(!parts) parts = ds.match(/(\d{2})\.(\d{2})\.(\d{4})/);
-        if(parts){
-          var key = parts[1].length===4 ? parts[0].slice(0,10) : parts[3]+'-'+parts[2]+'-'+parts[1];
-          map[key] = row;
+    if(resp.ok){
+      var text = await resp.text();
+      var lines = text.split("\n").filter(function(l){return l.trim();});
+      if(lines.length>=2){
+        var headers = lines[0].split(",").map(function(h){return h.trim().replace(/^"+|"+$/g,'');});
+        var map = {};
+        for(var i=1;i<lines.length;i++){
+          var vals = lines[i].split(",").map(function(v){return v.trim().replace(/^"+|"+$/g,'');});
+          var row = {};
+          for(var j=0;j<headers.length;j++) row[headers[j]] = vals[j]||'';
+          var ds = row.date || row.data || row.Date || '';
+          if(ds){
+            var parts = ds.match(/(\d{4})-(\d{2})-(\d{2})/);
+            if(!parts) parts = ds.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+            if(parts){
+              var key = parts[1].length===4 ? parts[0].slice(0,10) : parts[3]+'-'+parts[2]+'-'+parts[1];
+              map[key] = row;
+            }
+          }
         }
+        if(Object.keys(map).length) return map;
       }
     }
-    return map;
+  } catch(e){ /* fall through */ }
+
+  // 2) Fallback: Open-Meteo historical API (Gdańsk 54.35,18.65)
+  try {
+    if(!allData || !allData.days || !allData.days.length) return null;
+    var dates = allData.days.map(function(r){return r.date;}).filter(Boolean).sort();
+    var startDate = dates[0], endDate = dates[dates.length-1];
+    if(!startDate||!endDate) return null;
+    var apiUrl = "https://archive-api.open-meteo.com/v1/archive?latitude=54.35&longitude=18.65&start_date="+startDate+"&end_date="+endDate+"&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Europe/Warsaw";
+    var r2 = await fetch(apiUrl);
+    if(!r2.ok) return null;
+    var json = await r2.json();
+    if(!json.daily||!json.daily.time) return null;
+    var om = {};
+    for(var k=0;k<json.daily.time.length;k++){
+      var day = json.daily.time[k];
+      var tmax = json.daily.temperature_2m_max[k];
+      var tmin = json.daily.temperature_2m_min[k];
+      var precip = json.daily.precipitation_sum[k];
+      om[day] = {
+        temp: tmax!=null ? String(Math.round((tmax+tmin)/2*10)/10) : '',
+        rain: (precip!=null&&precip>0) ? 'tak' : 'nie',
+        rain_mm: precip!=null ? String(precip) : '',
+      };
+    }
+    return om;
   } catch(e){ return null; }
 }
 
