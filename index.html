@@ -46,6 +46,7 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
 .explain-body.open{display:block}
 .explain-body strong{color:var(--text)}
 .section-title{cursor:pointer;user-select:none}
+.section-sub{font-size:10px;color:var(--dim);margin:-8px 0 12px 13px;line-height:1.4}
 .section-title .def-text{display:none;font-size:11px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim);padding:8px 10px;margin-top:8px;background:var(--surface);border-radius:6px;line-height:1.5;letter-spacing:.3px}
 .section-title.show-def .def-text{display:block}
 .section-title .def-icon{font-size:11px;margin-left:6px;color:var(--dim);opacity:.5}
@@ -96,6 +97,7 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   <div class="section-title" onclick="this.classList.toggle('show-def')">📈 Regeneracja – HRV (zmienność rytmu serca)<span class="def-icon">ⓘ</span>
     <span class="def-text"><strong>HRV</strong> (Heart Rate Variability) – odstępy między kolejnymi uderzeniami serca. Wysokie HRV = układ przywspółczulny aktywny, organizm odpoczywa. Niskie HRV = stres, zmęczenie. To najważniejszy wskaźnik regeneracji. Ważny jest trend względem średniej 7-dniowej.</span>
   </div>
+  <div class="section-sub">HRV = zmienność rytmu serca · im wyższe, tym lepsza regeneracja · zielony = powyżej średniej</div>
   <div class="chart-box"><canvas id="hrvChart"></canvas></div>
   <div class="explain" onclick="toggle(this)">❓ Czym jest HRV i co oznacza &darr;</div>
   <div class="explain-body"><strong>HRV (Heart Rate Variability)</strong> – zmienność odstępów między uderzeniami serca. <br><br>
@@ -110,6 +112,7 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   <div class="section-title" onclick="this.classList.toggle('show-def')">📈 Regeneracja – RHR (tętno spoczynkowe)<span class="def-icon">ⓘ</span>
     <span class="def-text"><strong>RHR</strong> (Resting Heart Rate / tętno spoczynkowe) – najniższe tętno w ciągu doby (mierzone podczas snu). Niskie = wydajne serce, dobra regeneracja. Podwyższenie o 3-5 bpm powyżej normy = organizm walczy (zmęczenie, infekcja, stres). Powrót do normy = gotowość.</span>
   </div>
+  <div class="section-sub">RHR = tętno spoczynkowe · im niższe, tym lepsza regeneracja · wzrost &gt;3 = zmęczenie/stres</div>
   <div class="chart-box"><canvas id="rhrChart"></canvas></div>
   <div class="explain" onclick="toggle(this)">❓ Czym jest RHR i co oznacza &darr;</div>
   <div class="explain-body"><strong>RHR (Resting Heart Rate)</strong> – najniższe tętno w ciągu dnia (podczas snu).<br><br>
@@ -124,6 +127,7 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   <div class="section-title" onclick="this.classList.toggle('show-def')">💓 Tętno – wszystkie wskaźniki + średnie kroczące<span class="def-icon">ⓘ</span>
     <span class="def-text">Znormalizowane (0-100%) zestawienie <strong>RHR, HRV, hrAvg i hrMax</strong>. Linie kreskowane = średnia 7d i 30d. Pomaga zobaczyć ogólny trend regeneracji. Gdy RHR rośnie a HRV spada = organizm przeciążony.</span>
   </div>
+  <div class="section-sub">Wszystkie wartości przeskalowane 0-100% · linie kreskowane = średnia 7d i 30d</div>
   <div class="chart-box"><canvas id="combinedHrChart"></canvas></div>
   <div class="explain" onclick="toggle(this)">❓ Jak czytać ten wykres &darr;</div>
   <div class="explain-body">
@@ -142,6 +146,7 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   <div class="section-title" onclick="this.classList.toggle('show-def')">😴 Sen – regeneracja nocna<span class="def-icon">ⓘ</span>
     <span class="def-text"><strong>Sleep Score</strong> – jakość snu w skali 0-100. Składowe: czas trwania (40 pkt), sen głęboki (30 pkt), REM (30 pkt). ≥75 = świetna noc, 50-74 = przeciętna, &lt;50 = słaba regeneracja. Sen <strong>głęboki</strong> (Deep) – regeneracja fizyczna. <strong>REM</strong> – regeneracja psychiczna, konsolidacja pamięci.</span>
   </div>
+  <div class="section-sub">Sleep Score (0-100) · ≥75 = dobrze, &lt;50 = słabo · słupki = faza snu w minutach</div>
   <div class="chart-box"><canvas id="sleepChart"></canvas></div>
   <div class="explain" onclick="toggle(this)">❓ Odczytywanie wykresu snu &darr;</div>
   <div class="explain-body">
@@ -159,6 +164,7 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   <div class="section-title" onclick="this.classList.toggle('show-def')">🏋️ Obciążenie treningowe i równowaga<span class="def-icon">ⓘ</span>
     <span class="def-text"><strong>TLR</strong> (Training Load Ratio) – stosunek obciążenia treningowego z ostatnich 7 dni do średniej z 28 dni. Wartość 1.0 = równowaga. &lt;1.0 = odciążenie/regeneracja. 1.0-1.5 = optymalny rozwój. &gt;1.5 = ryzyko przetrenowania. Czerwona przerywana linia = próg przetrenowania (TLR=1.5).</span>
   </div>
+  <div class="section-sub">TLR = stosunek obciążenia 7d do 28d · &lt;1 = regeneracja · 1-1.5 = rozwój · &gt;1.5 = ryzyko</div>
   <div class="chart-box"><canvas id="loadChart"></canvas></div>
   <div class="explain" onclick="toggle(this)">❓ Co oznaczają te wskaźniki &darr;</div>
   <div class="explain-body">
@@ -173,6 +179,7 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   <div class="section-title" onclick="this.classList.toggle('show-def')">🚴 Kroki dzienne a tętno spoczynkowe<span class="def-icon">ⓘ</span>
     <span class="def-text">Słupki = <strong>kroki</strong> dzienne. <strong>RHR</strong> (odwrócone, prawa oś) – gdy linia idzie w górę, tętno spoczynkowe spada (dobrze). Gdy RHR rośnie mimo małej aktywności = zmęczenie lub stres. Fioletowe punkty = dni z rowerem.</span>
   </div>
+  <div class="section-sub">Słupki = kroki · linia = RHR (odwrócona, góra = niższe tętno) · fiolet = jazda na rowerze</div>
   <div class="chart-box"><canvas id="activityChart"></canvas></div>
   <div class="explain" onclick="toggle(this)">❓ Co widać na wykresie &darr;</div>
   <div class="explain-body">
@@ -189,8 +196,15 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   <div class="section-title" onclick="this.classList.toggle('show-def')">🔍 Automatyczne korelacje – co wpływa na regenerację?<span class="def-icon">ⓘ</span>
     <span class="def-text"><strong>Korelacja Pearsona (r)</strong> – mierzy liniową zależność między dwoma zmiennymi od -1 do +1. Im wartość bliższa +1 lub -1, tym silniejszy związek. r ≈ 0 = brak związku. <strong>Porównania warunkowe</strong> – średnie wartości HRV/RHR w podgrupach (np. dni aktywne vs leniwe).</span>
   </div>
+  <div class="section-sub">Pearsona r = siła związku · ↗ = rosną razem · ↘ = przeciwny kierunek · porównania = średnie w podgrupach</div>
   <div id="correlationCards" class="corr-grid">
     <div style="color:var(--dim);font-size:12px;padding:12px">Analizuję dane…</div>
+  </div>
+  <div style="font-size:10px;color:var(--dim);margin-bottom:10px;line-height:1.6">
+    <span style="color:var(--good)">↗</span> = oba wskaźniki w tę samą stronę &nbsp;
+    <span style="color:var(--danger)">↘</span> = w przeciwnych kierunkach &nbsp;
+    <strong style="color:var(--text2)">silna</strong> / <strong style="color:var(--text2)">umiarkowana</strong> / <strong style="color:var(--text2)">słaba</strong> = siła zależności &nbsp;
+    <strong style="color:var(--text2)">r</strong> = współczynnik korelacji
   </div>
   <div class="explain" onclick="toggle(this)">❓ Jak działają korelacje &darr;</div>
   <div class="explain-body">
@@ -377,73 +391,85 @@ function pctDiff(v1, v2) {
   return (d>0?'+':'') + d.toFixed(0) + '%';
 }
 
-function fmtR(r) { return 'r ' + (r>=0?'+':'') + r.toFixed(2); }
+function fmtR(r) { return (r>=0?'+':'') + r.toFixed(2); }
 
-function strength(r) {
+function strongR(r) {
   var a=Math.abs(r);
   return a>0.5?'silna':a>0.3?'umiarkowana':'słaba';
 }
-function dirDesc(r, pos, neg) {
-  if(r==null||isNaN(r)) return 'brak danych';
-  return r>0?pos:r<0?neg:'brak wyraźnego związku';
+function dirTxt(r) {
+  return r>0.2?'oba rosną razem':r<-0.2?'gdy jedno rośnie, drugie maleje':'brak wyraźnego kierunku';
 }
 
 function findCorrelations(data) {
   var out = [];
 
-  function pushPearson(label, var1, var2, xArr, yArr) {
+  function pushCorr(var1, var2, xArr, yArr, moreDesc, lessDesc) {
     var n=xArr.length;
     if(n<5) return;
     var sx=0,sy=0,sxy=0,sx2=0,sy2=0;
     for(var i=0;i<n;i++){var xv=xArr[i],yv=yArr[i];sx+=xv;sy+=yv;sxy+=xv*yv;sx2+=xv*xv;sy2+=yv*yv;}
     var r = (n*sxy-sx*sy)/Math.sqrt((n*sx2-sx*sx)*(n*sy2-sy*sy));
     if(isNaN(r)) return;
-    var rSign = r>=0?'dodatnia':'ujemna';
-    var s = strength(r);
-    var desc = 'związek '+rSign+', '+s;
-    var dirTxt = r>0.2?' (obie rosną razem)':r<-0.2?' (gdy X rośnie, Y maleje)':' (brak wyraźnego kierunku)';
+    var s = strongR(r);
+    var detail = s.charAt(0).toUpperCase()+s.slice(1)+' zależność · r = '+fmtR(r)+' · '+dirTxt(r);
     out.push({
       var1:var1, var2:var2, r:r,
       arrow: r>0?'↗':'↘',
-      desc: dirDesc(r, var1+' ↗ = '+var2+' ↗', var1+' ↗ = '+var2+' ↘'),
-      detail: desc+' ('+fmtR(r)+')'+dirTxt
+      desc: r>0?moreDesc:r<0?lessDesc:'Brak wyraźnego związku',
+      detail: detail
     });
   }
 
   // steps vs next-day RHR
   var sr_x=[],sr_y=[];
   for(var i=0;i<data.length-1;i++) if(data[i].steps!=null&&data[i+1].restingHr!=null){sr_x.push(data[i].steps);sr_y.push(data[i+1].restingHr);}
-  pushPearson('','Kroki (dzisiaj)','RHR (nast. dzień)',sr_x,sr_y);
+  pushCorr('Kroki (dzisiaj)','RHR (nast. dzień)',sr_x,sr_y,'Więcej ruchu → wyższe tętno (zmęczenie)','Więcej ruchu → niższe tętno (regeneracja działa)');
 
   // steps vs HRV next day
   var sh_x=[],sh_y=[];
   for(var i=0;i<data.length-1;i++) if(data[i].steps!=null&&data[i+1].hrv!=null){sh_x.push(data[i].steps);sh_y.push(data[i+1].hrv);}
-  pushPearson('','Kroki (dzisiaj)','HRV (nast. dzień)',sh_x,sh_y);
+  pushCorr('Kroki (dzisiaj)','HRV (nast. dzień)',sh_x,sh_y,'Po wysiłku HRV rośnie (dobrze)','Po wysiłku HRV spada (zmęczenie)');
 
   // HRV vs Sleep Score (same day)
   var hs_x=[],hs_y=[];
   for(var i=0;i<data.length;i++) if(data[i].hrv!=null&&data[i].sleepScore!=null){hs_x.push(data[i].hrv);hs_y.push(data[i].sleepScore);}
-  pushPearson('','HRV','Sleep Score',hs_x,hs_y);
+  pushCorr('HRV','Sleep Score',hs_x,hs_y,'Wyższe HRV = lepszy sen','Wyższe HRV = gorszy sen (nietypowe)');
 
   // Steps vs Sleep Score (next day)
   var ss_x=[],ss_y=[];
   for(var i=0;i<data.length-1;i++) if(data[i].steps!=null&&data[i+1].sleepScore!=null){ss_x.push(data[i].steps);ss_y.push(data[i+1].sleepScore);}
-  pushPearson('','Kroki (dzisiaj)','Sleep Score (nast. noc)',ss_x,ss_y);
+  pushCorr('Kroki (dzisiaj)','Sleep Score (nast. noc)',ss_x,ss_y,'Więcej ruchu w dzień = lepszy sen','Więcej ruchu w dzień = gorszy sen');
 
   // HRV vs RHR
   var hr_x=[],hr_y=[];
   for(var i=0;i<data.length;i++) if(data[i].hrv!=null&&data[i].restingHr!=null){hr_x.push(data[i].hrv);hr_y.push(data[i].restingHr);}
-  pushPearson('','HRV','RHR',hr_x,hr_y);
+  pushCorr('HRV','RHR',hr_x,hr_y,'HRV i RHR rosną razem (nietypowe)','Wysokie HRV = niskie RHR (prawidłowo)');
 
   // TLR vs HRV (next day)
   var th_x=[],th_y=[];
   for(var i=0;i<data.length-1;i++) if(data[i].trainingLoadRatio!=null&&data[i+1].hrv!=null){th_x.push(data[i].trainingLoadRatio);th_y.push(data[i+1].hrv);}
-  pushPearson('','TLR (obciążenie)','HRV (nast. dzień)',th_x,th_y);
+  pushCorr('TLR (obciążenie)','HRV (nast. dzień)',th_x,th_y,'Większy wysiłek → wyższe HRV','Większy wysiłek → niższe HRV (zmęczenie)');
 
   // Sleep Score vs next day RHR
   var srr_x=[],srr_y=[];
   for(var i=0;i<data.length-1;i++) if(data[i].sleepScore!=null&&data[i+1].restingHr!=null){srr_x.push(data[i].sleepScore);srr_y.push(data[i+1].restingHr);}
-  pushPearson('','Sleep Score','RHR (nast. dzień)',srr_x,srr_y);
+  pushCorr('Sleep Score','RHR (nast. dzień)',srr_x,srr_y,'Po dobrej nocy RHR wyższy (nietypowe)','Po dobrej nocy RHR niższy');
+
+  // weight vs HRV
+  var wh_x=[],wh_y=[];
+  for(var i=0;i<data.length;i++) if(data[i].weight!=null&&data[i].hrv!=null){wh_x.push(data[i].weight);wh_y.push(data[i].hrv);}
+  pushCorr('Waga','HRV',wh_x,wh_y,'Wyższa waga → wyższe HRV','Wyższa waga → niższe HRV');
+
+  // weight vs RHR
+  var wr_x=[],wr_y=[];
+  for(var i=0;i<data.length;i++) if(data[i].weight!=null&&data[i].restingHr!=null){wr_x.push(data[i].weight);wr_y.push(data[i].restingHr);}
+  pushCorr('Waga','RHR',wr_x,wr_y,'Wyższa waga → wyższe tętno','Wyższa waga → niższe tętno');
+
+  // weight vs Sleep Score
+  var ws_x=[],ws_y=[];
+  for(var i=0;i<data.length;i++) if(data[i].weight!=null&&data[i].sleepScore!=null){ws_x.push(data[i].weight);ws_y.push(data[i].sleepScore);}
+  pushCorr('Waga','Sleep Score',ws_x,ws_y,'Wyższa waga → lepszy sen','Wyższa waga → gorszy sen');
 
   // bike days vs non-bike HRV (same day)
   var bikeDays = data.filter(function(r){return r.exerciseNames&&r.exerciseNames.some(function(n){return /szosa|bik.*ing|cycling|rower|road.*bike|e.?bike|sport.?3|jazda|ride/.test(n);})&&r.hrv!=null;}).map(function(r){return r.hrv;});
@@ -799,7 +825,10 @@ function renderStatusCard(data) {
     parts.push(`<div>Sen (jakość snu) <span class="num">${refDay.sleepScore} pkt</span></div>`);
   }
   if(refDay.trainingLoadRatio!=null){
-    parts.push(`<div>TLR (obciążenie treningowe) <span class="num">${refDay.trainingLoadRatio.toFixed(2)}</span></div>`);
+    var tlr=refDay.trainingLoadRatio;
+    var tlrLabel = tlr>1.5?'ryzyko przetrenowania':tlr>1.2?'intensywny rozwój':tlr>0.8?'równowaga':tlr>0.5?'odciążenie':'głęboka regeneracja';
+    var tlrCls = tlr>1.5?'bad':tlr>0.8?'good':'neutral';
+    parts.push(`<div>TLR (obciążenie treningowe) <span class="num ${tlrCls}">${tlr.toFixed(2)}</span> <span style="font-size:10px;color:var(--dim)">– ${tlrLabel}</span></div>`);
   }
   mEl.innerHTML=parts.join('');
   
