@@ -71,6 +71,10 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
 .pdays-body.open{display:block}
 .pdays-toggle{font-size:10px;color:var(--accent);cursor:pointer;padding:4px 0 0;user-select:none}
 .pdays-toggle:hover{color:var(--text2)}
+/* global legend */
+.legend-bar{font-size:9px;color:var(--dim);display:flex;flex-wrap:wrap;gap:2px 14px;padding:8px 13px;margin-bottom:4px;background:var(--surface);border-radius:6px;line-height:1.5}
+.legend-bar span{white-space:nowrap}
+.legend-bar .good{color:var(--good)}.legend-bar .bad{color:var(--danger)}
 
 @media(max-width:640px){
   .status-verdict{font-size:22px}
@@ -99,6 +103,15 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   </div>
 </header>
 
+<!-- Global legend: all abbreviations with direction -->
+<div class="legend-bar">
+  <span title="Heart Rate Variability – zmienność rytmu serca"><strong class="good">HRV</strong> = zmienność rytmu · <span class="good">wyższe</span> = lepiej</span>
+  <span title="Resting Heart Rate – tętno spoczynkowe"><strong class="bad">RHR</strong> = tętno spoczynkowe · <span class="good">niższe</span> = lepiej</span>
+  <span title="Sleep Score – jakość snu 0-100"><strong>Sleep</strong> = jakość snu · <span class="good">wyższy</span> = lepiej</span>
+  <span title="Training Load Ratio – stosunek obciążenia 7d do 28d"><strong>TLR</strong> = obciążenie · <span class="good">&lt;1</span> regeneracja · <span class="bad">&gt;1,5</span> ryzyko</span>
+  <span><strong>⬆️/⬇️</strong> procent vs średnia · <span class="good">zielony</span> = lepiej · <span class="bad">czerwony</span> = gorzej</span>
+</div>
+
 <div id="statusCard" class="status-card" style="display:none">
   <div class="status-verdict" id="statusVerdict"></div>
   <div class="status-metrics" id="statusMetrics"></div>
@@ -110,7 +123,7 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   <div class="section-title" onclick="this.classList.toggle('show-def')">📈 Regeneracja – HRV (zmienność rytmu serca)<span class="def-icon">ⓘ</span>
     <span class="def-text"><strong>HRV</strong> (Heart Rate Variability) – odstępy między kolejnymi uderzeniami serca. Wysokie HRV = układ przywspółczulny aktywny, organizm odpoczywa. Niskie HRV = stres, zmęczenie. To najważniejszy wskaźnik regeneracji. Ważny jest trend względem średniej 7-dniowej.</span>
   </div>
-  <div class="section-sub"><span title="HRV (Heart Rate Variability – zmienność rytmu serca)">HRV</span> = zmienność rytmu serca · im wyższe, tym lepsza regeneracja · zielony = powyżej średniej</div>
+  <div class="section-sub"><span title="HRV (Heart Rate Variability – zmienność rytmu serca) – wyższe = lepiej">HRV</span> = zmienność rytmu serca · im wyższe, tym lepsza regeneracja · zielony = powyżej średniej</div>
   <div class="chart-box"><canvas id="hrvChart"></canvas></div>
   <div class="explain" onclick="toggle(this)">❓ Czym jest HRV i co oznacza &darr;</div>
   <div class="explain-body"><strong>HRV (Heart Rate Variability)</strong> – zmienność odstępów między uderzeniami serca. <br><br>
@@ -125,7 +138,7 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   <div class="section-title" onclick="this.classList.toggle('show-def')">📈 Regeneracja – RHR (tętno spoczynkowe)<span class="def-icon">ⓘ</span>
     <span class="def-text"><strong>RHR</strong> (Resting Heart Rate / tętno spoczynkowe) – najniższe tętno w ciągu doby (mierzone podczas snu). Niskie = wydajne serce, dobra regeneracja. Podwyższenie o 3-5 bpm powyżej normy = organizm walczy (zmęczenie, infekcja, stres). Powrót do normy = gotowość.</span>
   </div>
-  <div class="section-sub"><span title="RHR (Resting Heart Rate – tętno spoczynkowe)">RHR</span> = tętno spoczynkowe · im niższe, tym lepsza regeneracja · wzrost &gt;3 = zmęczenie/stres</div>
+  <div class="section-sub"><span title="RHR (Resting Heart Rate – tętno spoczynkowe) – niższe = lepiej">RHR</span> = tętno spoczynkowe · im niższe, tym lepsza regeneracja · wzrost &gt;3 = zmęczenie/stres</div>
   <div class="chart-box"><canvas id="rhrChart"></canvas></div>
   <div class="explain" onclick="toggle(this)">❓ Czym jest RHR i co oznacza &darr;</div>
   <div class="explain-body"><strong>RHR (Resting Heart Rate)</strong> – najniższe tętno w ciągu dnia (podczas snu).<br><br>
@@ -140,7 +153,7 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   <div class="section-title" onclick="this.classList.toggle('show-def')">💓 Tętno – wszystkie wskaźniki + średnie kroczące<span class="def-icon">ⓘ</span>
     <span class="def-text">Znormalizowane (0-100%) zestawienie <strong>RHR, HRV, hrAvg i hrMax</strong>. Linie kreskowane = średnia 7d i 30d. Pomaga zobaczyć ogólny trend regeneracji. Gdy RHR rośnie a HRV spada = organizm przeciążony.</span>
   </div>
-  <div class="section-sub"><span title="HRV (zmienność rytmu serca)">HRV</span>, <span title="RHR (tętno spoczynkowe)">RHR</span>, <span title="hrAvg – średnie tętno w ciągu dnia">hrAvg</span>, <span title="hrMax – maksymalne tętno w ciągu dnia">hrMax</span> · wszystko przeskalowane 0-100% · linie kreskowane = średnia 7d i 30d</div>
+  <div class="section-sub"><span title="HRV (zmienność rytmu serca) – wyższe = lepiej">HRV</span> · <span title="RHR (tętno spoczynkowe) – niższe = lepiej">RHR</span> · <span title="hrAvg – średnie tętno, niższe = lepiej">hrAvg</span> · <span title="hrMax – maks. tętno, niższe = lepiej">hrMax</span> · wszystko przeskalowane 0-100% · linie kreskowane = średnia 7d i 30d</div>
   <div class="chart-box"><canvas id="combinedHrChart"></canvas></div>
   <div class="explain" onclick="toggle(this)">❓ Jak czytać ten wykres &darr;</div>
   <div class="explain-body">
@@ -159,7 +172,7 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   <div class="section-title" onclick="this.classList.toggle('show-def')">😴 Sen – regeneracja nocna<span class="def-icon">ⓘ</span>
     <span class="def-text"><strong>Sleep Score</strong> – jakość snu w skali 0-100. Składowe: czas trwania (40 pkt), sen głęboki (30 pkt), REM (30 pkt). ≥75 = świetna noc, 50-74 = przeciętna, &lt;50 = słaba regeneracja. Sen <strong>głęboki</strong> (Deep) – regeneracja fizyczna. <strong>REM</strong> – regeneracja psychiczna, konsolidacja pamięci.</span>
   </div>
-  <div class="section-sub"><span title="Sleep Score – jakość snu (0-100)">Sleep Score</span> (0-100) · ≥75 = dobrze, &lt;50 = słabo · słupki = faza snu w minutach</div>
+  <div class="section-sub"><span title="Sleep Score – jakość snu (0-100) – wyższy = lepiej">Sleep Score</span> (0-100) · ≥75 = dobrze, &lt;50 = słabo · słupki = faza snu w minutach</div>
   <div class="chart-box"><canvas id="sleepChart"></canvas></div>
   <div class="explain" onclick="toggle(this)">❓ Odczytywanie wykresu snu &darr;</div>
   <div class="explain-body">
@@ -177,7 +190,7 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   <div class="section-title" onclick="this.classList.toggle('show-def')">🏋️ Obciążenie treningowe i równowaga<span class="def-icon">ⓘ</span>
     <span class="def-text"><strong>TLR</strong> (Training Load Ratio) – stosunek obciążenia treningowego z ostatnich 7 dni do średniej z 28 dni. Wartość 1.0 = równowaga. &lt;1.0 = odciążenie/regeneracja. 1.0-1.5 = optymalny rozwój. &gt;1.5 = ryzyko przetrenowania. Czerwona przerywana linia = próg przetrenowania (TLR=1.5).</span>
   </div>
-  <div class="section-sub"><span title="TLR (Training Load Ratio – obciążenie treningowe)">TLR</span> = stosunek obciążenia 7d do 28d · &lt;1 = regeneracja · 1-1.5 = rozwój · &gt;1.5 = ryzyko</div>
+  <div class="section-sub"><span title="TLR (Training Load Ratio – obciążenie treningowe) – &lt;1 = regeneracja, &gt;1.5 = ryzyko">TLR</span> = stosunek obciążenia 7d do 28d · &lt;1 = regeneracja · 1-1.5 = rozwój · &gt;1.5 = ryzyko</div>
   <div class="chart-box"><canvas id="loadChart"></canvas></div>
   <div class="explain" onclick="toggle(this)">❓ Co oznaczają te wskaźniki &darr;</div>
   <div class="explain-body">
@@ -192,7 +205,7 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   <div class="section-title" onclick="this.classList.toggle('show-def')">🚴 Kroki dzienne a tętno spoczynkowe<span class="def-icon">ⓘ</span>
     <span class="def-text">Słupki = <strong>kroki</strong> dzienne. <strong>RHR</strong> (odwrócone, prawa oś) – gdy linia idzie w górę, tętno spoczynkowe spada (dobrze). Gdy RHR rośnie mimo małej aktywności = zmęczenie lub stres. Fioletowe punkty = dni z rowerem.</span>
   </div>
-  <div class="section-sub">Słupki = kroki · linia = <span title="RHR (tętno spoczynkowe)">RHR</span> (odwrócona, góra = niższe tętno) · fiolet = jazda na rowerze</div>
+  <div class="section-sub">Słupki = kroki (<span class="good">więcej</span> = lepiej) · linia = <span title="RHR (tętno spoczynkowe) – niższe = lepiej">RHR</span> (odwrócona, góra = niższe tętno = <span class="good">lepiej</span>) · fiolet = jazda na rowerze</div>
   <div class="chart-box"><canvas id="activityChart"></canvas></div>
   <div class="explain" onclick="toggle(this)">❓ Co widać na wykresie &darr;</div>
   <div class="explain-body">
@@ -209,7 +222,7 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   <div class="section-title" onclick="this.classList.toggle('show-def')">⚖️ Waga<span class="def-icon">ⓘ</span>
     <span class="def-text"><strong>Waga</strong> – masa ciała w kg. Wyższa waga → większe obciążenie układu krążenia. W korelacjach sprawdzamy, czy waga wpływa na HRV, RHR i jakość snu.</span>
   </div>
-  <div class="section-sub">Waga (kg) – im stabilniejsza, tym lepiej · wzrost wagi = większe obciążenie serca</div>
+  <div class="section-sub">Waga (kg) – im stabilniejsza (<span class="good">małe wahania</span>), tym lepiej · wzrost wagi = <span class="bad">większe obciążenie</span> serca · im <span class="good">niższa</span>, tym lepiej (w granicach normy)</div>
   <div class="chart-box"><canvas id="weightChart"></canvas></div>
   <div class="explain" onclick="toggle(this)">❓ Dlaczego waga ma znaczenie &darr;</div>
   <div class="explain-body">
@@ -250,7 +263,7 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   <div class="section-title" onclick="this.classList.toggle('show-def')">📋 Profile dni – co wyróżnia dobre i złe dni?<span class="def-icon">ⓘ</span>
     <span class="def-text">Zestawienie średnich wskaźników dla dni o skrajnych wartościach kroków, oraz dni z rowerem. Pomaga znaleźć wzorce: czy w dni z rowerem HRV jest wyższe? Czy w dni z małą liczbą kroków sen jest gorszy?</span>
   </div>
-  <div class="section-sub">Dla każdej grupy pokazujemy średnie wartości + odchylenie procentowe od średniej ogólnej · zielony = lepiej, czerwony = gorzej</div>
+  <div class="section-sub">Dla każdej grupy pokazujemy średnie wartości + odchylenie procentowe od średniej ogólnej · <span class="good">zielony</span> = lepiej · <span class="bad">czerwony</span> = gorzej · <span title="HRV – wyższe = lepiej">HRV: <span class="good">↑</span></span> · <span title="RHR – niższe = lepiej">RHR: <span class="good">↓</span></span> · <span title="Sleep Score – wyższy = lepiej">Sleep: <span class="good">↑</span></span></div>
   <div id="dayProfileCards" class="corr-grid">
     <div style="color:var(--dim);font-size:12px;padding:12px">Analizuję dane…</div>
   </div>
@@ -261,7 +274,7 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   <div class="section-title" onclick="this.classList.toggle('show-def')">📅 Tabela wszystkich dni<span class="def-icon">ⓘ</span>
     <span class="def-text">Pełne zestawienie wszystkich wskaźników dla każdego dnia w wybranym zakresie. Możesz przeglądać, porównywać i szukać zależności samodzielnie. Przewiń w prawo by zobaczyć więcej kolumn.</span>
   </div>
-  <div class="section-sub">Wszystkie wskaźniki dla każdego dnia · kolory: zielony = dobry, czerwony = zły · 🚴 = dzień z rowerem</div>
+  <div class="section-sub">Wszystkie wskaźniki każdego dnia · <span class="good">zielony</span> = dobry · <span class="bad">czerwony</span> = zły · 🚴 = rower · 🔋 = e-bike · 🌙 = faza księżyca · 🌧️ = deszcz</div>
   <div id="dataTableWrap" style="overflow-x:auto;font-size:10px;font-family:var(--mono);color:var(--text2)">Ładowanie…</div>
 </div>
 
@@ -930,10 +943,12 @@ function renderWeightChart(data) {
 
 function abbrTitle(s) {
   if(!s) return '';
-  var m = {HRV:'HRV (Heart Rate Variability – zmienność rytmu serca)', RHR:'RHR (Resting Heart Rate – tętno spoczynkowe)', TLR:'TLR (Training Load Ratio – obciążenie treningowe)',
-    'Sleep Score':'Sleep Score – jakość snu (0-100)',
-    bpm:'bpm (uderzeń na minutę)',
-    ms:'ms (milisekund)'};
+  var m = {HRV:'HRV (Heart Rate Variability – zmienność rytmu serca) – wyższe = lepiej, wysoka regeneracja',
+    RHR:'RHR (Resting Heart Rate – tętno spoczynkowe) – niższe = lepiej, wydajne serce',
+    TLR:'TLR (Training Load Ratio – obciążenie treningowe) – poniżej 1 = regeneracja, powyżej 1.5 = ryzyko przetrenowania',
+    'Sleep Score':'Sleep Score – jakość snu (0-100). ≥75 = dobrze, <50 = słabo. Wyższy = lepiej',
+    bpm:'bpm (uderzeń na minutę) – dla RHR: niższe = lepiej',
+    ms:'ms (milisekund) – dla HRV: wyższe = lepiej'};
   var k = Object.keys(m);
   for(var i=0;i<k.length;i++) if(s.indexOf(k[i])>=0) return m[k[i]];
   return s;
@@ -980,10 +995,11 @@ function profileGroup(data, label, groupDays, icon) {
     var vals = data.map(function(r){return r[field];}).filter(function(v){return v!=null;});
     return vals.length ? vals.reduce(function(s,v){return s+v;},0)/vals.length : null;
   };
-  var fmtPct = function(v, ref) {
+  var fmtPct = function(v, ref, higherIsBetter) {
     if(v==null||!ref) return '';
     var d = ((v-ref)/ref*100);
-    return ' <span style="color:'+(d>0?'var(--good)':'var(--danger)')+'">'+(d>0?'+':'')+d.toFixed(0)+'%</span>';
+    var isGood = higherIsBetter ? d>0 : d<0;
+    return ' <span style="color:'+(isGood?'var(--good)':'var(--danger)')+'">'+(d>0?'+':'')+d.toFixed(0)+'%</span>';
   };
   var hrvAvg = avg('hrv');
   var rhrAvg = avg('restingHr');
@@ -996,18 +1012,18 @@ function profileGroup(data, label, groupDays, icon) {
   var aSleep = allAvg('sleepScore');
   var aWeight = allAvg('weight');
   var aDist = allAvg('dist');
-  var row = function(v, u, ref) { return v!=null ? v.toFixed(v%1===0?0:1)+u + fmtPct(v, ref) : '—'; };
+  var row = function(v, u, ref, hib) { return v!=null ? v.toFixed(v%1===0?0:1)+u + fmtPct(v, ref, hib) : '—'; };
   var t = function(s) { return 'title="' + abbrTitle(s) + '"'; };
   var dateList = groupDays.map(function(r){return r.date.slice(5);}).sort().join(', ');
   var html = '<div class="corr-card">' +
     '<div class="corr-vars" style="font-size:13px">' + icon + ' ' + label + ' <span style="color:var(--dim);font-weight:400">(' + groupDays.length + ' dni)</span></div>' +
     '<table style="width:100%;border-collapse:collapse;margin-top:4px">' +
-    '<tr><td style="color:var(--dim);padding:1px 4px" ' + t('HRV') + '>HRV</td><td style="text-align:right;padding:1px 4px">' + row(hrvAvg,' ms',aHrv) + '</td></tr>' +
-    '<tr><td style="color:var(--dim);padding:1px 4px" ' + t('RHR') + '>RHR</td><td style="text-align:right;padding:1px 4px">' + row(rhrAvg,' bpm',aRhr) + '</td></tr>' +
-    '<tr><td style="color:var(--dim);padding:1px 4px" ' + t('Sleep Score') + '>Sen</td><td style="text-align:right;padding:1px 4px">' + row(sleepAvg,' pkt',aSleep) + '</td></tr>' +
+    '<tr><td style="color:var(--dim);padding:1px 4px" ' + t('HRV') + '>HRV</td><td style="text-align:right;padding:1px 4px">' + row(hrvAvg,' ms',aHrv,true) + '</td></tr>' +
+    '<tr><td style="color:var(--dim);padding:1px 4px" ' + t('RHR') + '>RHR</td><td style="text-align:right;padding:1px 4px">' + row(rhrAvg,' bpm',aRhr,false) + '</td></tr>' +
+    '<tr><td style="color:var(--dim);padding:1px 4px" ' + t('Sleep Score') + '>Sen</td><td style="text-align:right;padding:1px 4px">' + row(sleepAvg,' pkt',aSleep,true) + '</td></tr>' +
     (stepsAvg!=null?'<tr><td style="color:var(--dim);padding:1px 4px">Kroki</td><td style="text-align:right;padding:1px 4px">' + Math.round(stepsAvg).toLocaleString('pl') + '</td></tr>':'') +
-    (distAvg!=null?'<tr><td style="color:var(--dim);padding:1px 4px">Dystans</td><td style="text-align:right;padding:1px 4px">' + row(distAvg,' km',aDist) + '</td></tr>':'') +
-    (weightAvg!=null?'<tr><td style="color:var(--dim);padding:1px 4px">Waga</td><td style="text-align:right;padding:1px 4px">' + row(weightAvg,' kg',aWeight) + '</td></tr>':'') +
+    (distAvg!=null?'<tr><td style="color:var(--dim);padding:1px 4px">Dystans</td><td style="text-align:right;padding:1px 4px">' + row(distAvg,' km',aDist,true) + '</td></tr>':'') +
+    (weightAvg!=null?'<tr><td style="color:var(--dim);padding:1px 4px">Waga</td><td style="text-align:right;padding:1px 4px">' + row(weightAvg,' kg',aWeight,false) + '</td></tr>':'') +
     '</table>' +
     '<div class="pdays-toggle" onclick="this.nextElementSibling.classList.toggle(\'open\')">📅 Pokaż dni &darr;</div>' +
     '<div class="pdays-body">' + dateList + '</div>' +
@@ -1121,11 +1137,11 @@ function renderDataTable(data) {
     '<th style="padding:2px 6px;text-align:right" title="' + abbrTitle('HRV') + '">HRV</th>' +
     '<th style="padding:2px 6px;text-align:right" title="' + abbrTitle('RHR') + '">RHR</th>' +
     '<th style="padding:2px 6px;text-align:right" title="' + abbrTitle('Sleep Score') + '">Sen</th>' +
-    '<th style="padding:2px 6px;text-align:right">Waga</th>' +
+    '<th style="padding:2px 6px;text-align:right" title="Waga (kg) – im stabilniejsza tym lepiej">Waga</th>' +
     '<th style="padding:2px 6px;text-align:right" title="' + abbrTitle('TLR') + '">TLR</th>' +
-    '<th style="padding:2px 6px;text-align:center">🚴/🔋</th>' +
-    '<th style="padding:2px 6px;text-align:center" title="Faza Księżyca">🌙</th>' +
-    '<th style="padding:2px 6px;text-align:center">🌧️</th>' +
+    '<th style="padding:2px 6px;text-align:center" title="🚴 = rower · 🔋 = e-bike">🚴/🔋</th>' +
+    '<th style="padding:2px 6px;text-align:center" title="Faza Księżyca – nów, pełnia, kwadra">🌙</th>' +
+    '<th style="padding:2px 6px;text-align:center" title="🌧️ = deszcz (opady wg arkusza pogodowego)">🌧️</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
