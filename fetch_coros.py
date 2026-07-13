@@ -75,6 +75,7 @@ MOBILE_DATA_TYPES = {
 # ── Google Sheets config (same as in index.html) ──────────────────────────
 
 SHEET_ID = "1xPJ8xBAPsDv2NfZaKNtzcv6g8hYCVuA40A9iPKN--eo"
+WEATHER_SHEET_ID = "1-bCTdLFUMI5tzxgZbfFDS-hQhN4nksFhQa25fWooyB0"
 SHEETS = {
     "activity": "1277227831",
     "sleep": "1078830",
@@ -185,8 +186,9 @@ def get_val(row: dict, partial: str) -> str | None:
 # ── Google Sheets data ───────────────────────────────────────────────────
 
 
-async def fetch_sheet(client: httpx.AsyncClient, gid: str) -> list[dict]:
-    url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={gid}"
+async def fetch_sheet(client: httpx.AsyncClient, gid: str, sheet_id: str | None = None) -> list[dict]:
+    sid = sheet_id or SHEET_ID
+    url = f"https://docs.google.com/spreadsheets/d/{sid}/export?format=csv&gid={gid}"
     resp = await client.get(url)
     resp.raise_for_status()
     return parse_csv(resp.text)
@@ -219,7 +221,7 @@ async def load_google_sheets() -> dict[str, dict]:
         vit_raw = await fetch_sheet(client, SHEETS["vitals"])
         bod_raw = await fetch_sheet(client, SHEETS["body"])
         try:
-            wth_raw = await fetch_sheet(client, SHEETS["weather"])
+            wth_raw = await fetch_sheet(client, SHEETS["weather"], WEATHER_SHEET_ID)
         except Exception:
             wth_raw = []
 

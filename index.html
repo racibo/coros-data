@@ -285,6 +285,7 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
 
 <script>
 const SHEET_ID = "1xPJ8xBAPsDv2NfZaKNtzcv6g8hYCVuA40A9iPKN--eo";
+const WEATHER_SHEET_ID = "1-bCTdLFUMI5tzxgZbfFDS-hQhN4nksFhQa25fWooyB0";
 const SHEETS = { activity:"1277227831", sleep:"1078830", vitals:"111422029", body:"1828589559", weather:"0" };
 
 // ── Moon phase (pure JS, no API) ─────────────────
@@ -315,7 +316,7 @@ function calcMoonPhase(dateStr) {
 
 // ── Weather sheet ────────────────────────────────
 async function loadWeatherSheet() {
-  var url = "https://docs.google.com/spreadsheets/d/"+SHEET_ID+"/export?format=csv&gid="+SHEETS.weather;
+  var url = "https://docs.google.com/spreadsheets/d/"+WEATHER_SHEET_ID+"/export?format=csv&gid="+SHEETS.weather;
   try {
     var resp = await fetch(url);
     if(!resp.ok) return null;
