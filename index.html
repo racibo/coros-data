@@ -232,6 +232,26 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   </div>
 </div>
 
+<!-- DAY PROFILES -->
+<div class="section">
+  <div class="section-title" onclick="this.classList.toggle('show-def')">📋 Profile dni – co wyróżnia dobre i złe dni?<span class="def-icon">ⓘ</span>
+    <span class="def-text">Zestawienie średnich wskaźników dla dni o skrajnych wartościach kroków, oraz dni z rowerem. Pomaga znaleźć wzorce: czy w dni z rowerem HRV jest wyższe? Czy w dni z małą liczbą kroków sen jest gorszy?</span>
+  </div>
+  <div class="section-sub">Dla każdej grupy pokazujemy średnie wartości + odchylenie procentowe od średniej ogólnej · zielony = lepiej, czerwony = gorzej</div>
+  <div id="dayProfileCards" class="corr-grid">
+    <div style="color:var(--dim);font-size:12px;padding:12px">Analizuję dane…</div>
+  </div>
+</div>
+
+<!-- DATA TABLE -->
+<div class="section">
+  <div class="section-title" onclick="this.classList.toggle('show-def')">📅 Tabela wszystkich dni<span class="def-icon">ⓘ</span>
+    <span class="def-text">Pełne zestawienie wszystkich wskaźników dla każdego dnia w wybranym zakresie. Możesz przeglądać, porównywać i szukać zależności samodzielnie. Przewiń w prawo by zobaczyć więcej kolumn.</span>
+  </div>
+  <div class="section-sub">Wszystkie wskaźniki dla każdego dnia · kolory: zielony = dobry, czerwony = zły · 🚴 = dzień z rowerem</div>
+  <div id="dataTableWrap" style="overflow-x:auto;font-size:10px;font-family:var(--mono);color:var(--text2)">Ładowanie…</div>
+</div>
+
 <!-- /end sections -->
 
 <div id="loading" style="text-align:center;padding:60px 0;color:var(--dim);font-family:var(--mono)">Ładowanie danych…</div>
@@ -866,6 +886,99 @@ function renderCorrelations(data) {
   ).join('');
 }
 
+// ── Group profiles ──────────────────────────────
+function profileGroup(data, label, filterFn, icon) {
+  var group = data.filter(filterFn);
+  if(group.length<2) return null;
+  var avg = function(field) {
+    var vals = group.map(function(r){return r[field];}).filter(function(v){return v!=null;});
+    return vals.length ? vals.reduce(function(s,v){return s+v;},0)/vals.length : null;
+  };
+  var allAvg = function(field) {
+    var vals = data.map(function(r){return r[field];}).filter(function(v){return v!=null;});
+    return vals.length ? vals.reduce(function(s,v){return s+v;},0)/vals.length : null;
+  };
+  var fmtPct = function(v, ref) {
+    if(v==null||!ref) return '';
+    var d = ((v-ref)/ref*100);
+    return ' <span style="color:'+(d>0?'var(--good)':'var(--danger)')+'">'+(d>0?'+':'')+d.toFixed(0)+'%</span>';
+  };
+  var hrvAvg = avg('hrv');
+  var rhrAvg = avg('restingHr');
+  var sleepAvg = avg('sleepScore');
+  var stepsAvg = avg('steps');
+  var weightAvg = avg('weight');
+  var aHrv = allAvg('hrv');
+  var aRhr = allAvg('restingHr');
+  var aSleep = allAvg('sleepScore');
+  var aWeight = allAvg('weight');
+  var row = function(v, u, ref) { return v!=null ? v.toFixed(v%1===0?0:1)+u + fmtPct(v, ref) : '—'; };
+  var html = '<div class="corr-card">' +
+    '<div class="corr-vars" style="font-size:13px">' + icon + ' ' + label + ' <span style="color:var(--dim);font-weight:400">(' + group.length + ' dni)</span></div>' +
+    '<table style="width:100%;border-collapse:collapse;margin-top:6px">' +
+    '<tr><td style="color:var(--dim);padding:1px 4px">HRV</td><td style="text-align:right;padding:1px 4px">' + row(hrvAvg,' ms',aHrv) + '</td></tr>' +
+    '<tr><td style="color:var(--dim);padding:1px 4px">RHR</td><td style="text-align:right;padding:1px 4px">' + row(rhrAvg,' bpm',aRhr) + '</td></tr>' +
+    '<tr><td style="color:var(--dim);padding:1px 4px">Sen</td><td style="text-align:right;padding:1px 4px">' + row(sleepAvg,' pkt',aSleep) + '</td></tr>' +
+    (stepsAvg!=null?'<tr><td style="color:var(--dim);padding:1px 4px">Kroki</td><td style="text-align:right;padding:1px 4px">' + Math.round(stepsAvg).toLocaleString('pl') + '</td></tr>':'') +
+    (weightAvg!=null?'<tr><td style="color:var(--dim);padding:1px 4px">Waga</td><td style="text-align:right;padding:1px 4px">' + row(weightAvg,' kg',aWeight) + '</td></tr>':'') +
+    '</table></div>';
+  return html;
+}
+
+function renderDayProfiles(data) {
+  var el = document.getElementById('dayProfileCards');
+  var cards = [];
+
+  // top 5 steps
+  var sorted = data.slice().sort(function(a,b){return (b.steps||0)-(a.steps||0);});
+  var top5 = sorted.slice(0,5);
+  cards.push(profileGroup(data, '5 najwięcej kroków', function(r){return top5.indexOf(r)>=0;}, '🏆'));
+  // bottom 5 active steps (>0)
+  var bottom5 = sorted.filter(function(r){return r.steps>0;}).slice(-5);
+  if(bottom5.length>=2) cards.push(profileGroup(data, '5 najmniej kroków', function(r){return bottom5.indexOf(r)>=0;}, '🦥'));
+  // bike days
+  cards.push(profileGroup(data, 'Dni z rowerem', function(r){return r.exerciseNames&&r.exerciseNames.some(function(n){return /szosa|bik.*ing|cycling|rower|road.*bike|e.?bike|sport.?3|jazda|ride/.test(n);});}, '🚴'));
+  // e-bike only
+  cards.push(profileGroup(data, 'Dni z e-bikiem', function(r){return r.exerciseNames&&r.exerciseNames.some(function(n){return /e.?bike|e.?rower/.test(n);});}, '🔋'));
+
+  var html = cards.filter(function(c){return c!=null;}).join('');
+  el.innerHTML = html || '<div style="color:var(--dim);font-size:12px;padding:12px">Za mało danych do analizy (minimum 2 dni w grupie).</div>';
+}
+
+// ── Full data table ─────────────────────────────
+function renderDataTable(data) {
+  var el = document.getElementById('dataTableWrap');
+  var isBike = function(r) {
+    return r.exerciseNames&&r.exerciseNames.some(function(n){return /szosa|bik.*ing|cycling|rower|road.*bike|e.?bike|sport.?3|jazda|ride/.test(n);});
+  };
+  var fmt = function(v, u) { return v!=null ? v+(u||'') : '—'; };
+  var rows = data.slice().reverse().map(function(r){
+    var d = r.date.slice(5);
+    var bike = isBike(r) ? '🚴' : '';
+    return '<tr>' +
+      '<td style="padding:2px 6px;white-space:nowrap">' + d + '</td>' +
+      '<td style="padding:2px 6px;text-align:right">' + fmt(r.steps) + '</td>' +
+      '<td style="padding:2px 6px;text-align:right;color:' + (r.hrv!=null&&r._a7hrv!=null&&r.hrv<r._a7hrv?'var(--danger)':'var(--good)') + '">' + fmt(r.hrv,' ms') + '</td>' +
+      '<td style="padding:2px 6px;text-align:right;color:' + (r.restingHr!=null&&r._rhrDevAbs!=null&&r._rhrDevAbs>=3?'var(--danger)':'var(--good)') + '">' + fmt(r.restingHr,' bpm') + '</td>' +
+      '<td style="padding:2px 6px;text-align:right;color:' + (r.sleepScore!=null&&r.sleepScore<50?'var(--danger)':r.sleepScore!=null&&r.sleepScore>=75?'var(--good)':'var(--text2)') + '">' + fmt(r.sleepScore,' pkt') + '</td>' +
+      '<td style="padding:2px 6px;text-align:right">' + fmt(r.weight,' kg') + '</td>' +
+      '<td style="padding:2px 6px;text-align:right;color:' + (r.trainingLoadRatio!=null&&r.trainingLoadRatio>1.5?'var(--danger)':'var(--text2)') + '">' + fmt(r.trainingLoadRatio) + '</td>' +
+      '<td style="padding:2px 6px;text-align:center">' + bike + '</td>' +
+      '</tr>';
+  }).join('');
+  el.innerHTML = '<table style="width:100%;border-collapse:collapse;line-height:1.6">' +
+    '<thead><tr style="color:var(--dim);border-bottom:1px solid var(--border)">' +
+    '<th style="padding:2px 6px;text-align:left">Data</th>' +
+    '<th style="padding:2px 6px;text-align:right">Kroki</th>' +
+    '<th style="padding:2px 6px;text-align:right" title="' + abbrTitle('HRV') + '">HRV</th>' +
+    '<th style="padding:2px 6px;text-align:right" title="' + abbrTitle('RHR') + '">RHR</th>' +
+    '<th style="padding:2px 6px;text-align:right" title="' + abbrTitle('Sleep Score') + '">Sen</th>' +
+    '<th style="padding:2px 6px;text-align:right">Waga</th>' +
+    '<th style="padding:2px 6px;text-align:right" title="' + abbrTitle('TLR') + '">TLR</th>' +
+    '<th style="padding:2px 6px;text-align:center">🚴</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
 function renderStatusCard(data) {
   const card=document.getElementById('statusCard');
   const today=data[data.length-1];
@@ -937,6 +1050,8 @@ function render(range) {
   charts.weightChart=renderWeightChart(data);
   renderAverages(data);
   renderCorrelations(data);
+  renderDayProfiles(data);
+  renderDataTable(data);
 }
 
 async function init() {
