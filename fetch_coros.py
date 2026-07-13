@@ -318,6 +318,15 @@ async def load_google_sheets() -> dict[str, dict]:
         if weather_note:
             map_[ds]["weatherNote"] = weather_note.strip()
 
+    # Body sheet (weight)
+    for r in bod_raw:
+        k = ensure(parse_date(get_val(r, "date") or get_val(r, "time")))
+        if not k:
+            continue
+        w = to_n(get_val(r, "weight") or get_val(r, "waga"))
+        if w:
+            map_[k]["weight"] = w
+
     # Moon phase for every day
     for ds in list(map_.keys()):
         mp = calc_moon_phase(ds)

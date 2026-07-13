@@ -1053,22 +1053,15 @@ function renderDayProfiles(data) {
   // top 5 HRV (best recovery)
   var hrvSorted = data.slice().sort(function(a,b){return (b.hrv||0)-(a.hrv||0);});
   addProfile('5 najwyższe HRV', hrvSorted.slice(0,5), '💚');
-  // bottom 5 HRV (worst recovery)
-  var hrvBottom = data.slice().filter(function(r){return r.hrv!=null;}).sort(function(a,b){return (a.hrv||0)-(b.hrv||0);});
-  addProfile('5 najniższe HRV', hrvBottom.slice(0,5), '❤️‍🩹');
-
-  // top 5 sleep
-  var sleepSorted = data.slice().sort(function(a,b){return (b.sleepScore||0)-(a.sleepScore||0);});
-  addProfile('5 najlepszy sen', sleepSorted.slice(0,5), '😴💪');
-  // bottom 5 sleep
-  var sleepBottom = data.slice().filter(function(r){return r.sleepScore!=null;}).sort(function(a,b){return (a.sleepScore||0)-(b.sleepScore||0);});
-  addProfile('5 najgorszy sen', sleepBottom.slice(0,5), '😴❌');
+  // bottom 5 RHR (lowest resting heart rate = best recovery)
+  var rhrSorted = data.slice().filter(function(r){return r.restingHr!=null;}).sort(function(a,b){return (a.restingHr||0)-(b.restingHr||0);});
+  addProfile('5 najniższe RHR', rhrSorted.slice(0,5), '💚');
 
   // lowest weight / highest weight
   var weightSorted = data.slice().filter(function(r){return r.weight!=null;}).sort(function(a,b){return (a.weight||0)-(b.weight||0);});
-  if(weightSorted.length>=5){
-    addProfile('5 najniższa waga', weightSorted.slice(0,5), '⬇️⚖️');
-    addProfile('5 najwyższa waga', weightSorted.slice(-5), '⬆️⚖️');
+  if(weightSorted.length>=3){
+    addProfile('3 najniższa waga', weightSorted.slice(0,3), '⬇️⚖️');
+    addProfile('3 najwyższa waga', weightSorted.slice(-3), '⬆️⚖️');
   }
 
   // bike days
@@ -1085,18 +1078,19 @@ function renderDayProfiles(data) {
   addProfile('Pełnia', fullMoon, '🌕');
   addProfile('Nów', newMoon, '🌑');
 
-  // ── Rain profiles (if weather data exists) ──
+  // ── Rain profile (if weather data exists) ──
   var rainyDays = data.filter(function(r){
     var ra = (r.rain||'').toString().toLowerCase();
     return ra=='tak'||ra=='yes'||ra=='1'||ra=='true'||r.rainMm>0;
   });
   addProfile('Dni deszczowe', rainyDays, '🌧️');
-  var dryDays = data.filter(function(r){
-    if(r.rain===undefined&&r.rainMm===undefined) return false;
-    var ra = (r.rain||'').toString().toLowerCase();
-    return !(ra=='tak'||ra=='yes'||ra=='1'||ra=='true'||r.rainMm>0);
-  });
-  addProfile('Dni bez deszczu', dryDays, '☀️');
+  // ── Temperature profiles (if weather data exists) ──
+  var tempDays = data.filter(function(r){return r.temp!=null;});
+  if(tempDays.length>=3){
+    var tempSorted = tempDays.slice().sort(function(a,b){return (a.temp||0)-(b.temp||0);});
+    addProfile('Najzimniejsze dni', tempSorted.slice(0,3), '🥶');
+    addProfile('Najcieplejsze dni', tempSorted.slice(-3), '🥵');
+  }
 
   var html = cards.filter(function(c){return c!=null;}).join('');
   el.innerHTML = html || '<div style="color:var(--dim);font-size:12px;padding:12px">Za mało danych do analizy (minimum 2 dni w grupie).</div>';
