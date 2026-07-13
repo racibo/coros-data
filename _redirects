@@ -1,0 +1,5 @@
+# Blokuj dostęp do pliku _redirects (zabezpieczenie)
+/_redirects    404
+
+# Wszystkie ścieżki → index.html (SPA)
+/*    /index.html    200

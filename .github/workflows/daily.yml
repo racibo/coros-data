@@ -1,0 +1,51 @@
+name: Daily data update
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+env:
+  COROS_REGION: eu
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python deps
+        run: pip install httpx coros-training-mcp python-dotenv
+
+      - name: Restore Coros auth cache
+        id: cache-auth
+        uses: actions/cache@v4
+        with:
+          path: coros_auth.json
+          key: coros-auth-prod
+
+      - name: Fetch data (Coros)
+        env:
+          COROS_EMAIL: ${{ secrets.COROS_EMAIL }}
+          COROS_PASSWORD: ${{ secrets.COROS_PASSWORD }}
+          COROS_AUTH_CACHE: coros_auth.json
+        run: python fetch_coros.py 2>&1 | tee debug.log
+
+      - name: Merge Strava activities
+        run: python merge_strava.py activities.csv 2>&1 | tee -a debug.log
+
+      - name: Prepare deploy folder
+        run: |
+          mkdir -p _site
+          cp index.html _site/ 2>/dev/null || true
+          cp data.json _site/
+          cp debug.log _site/ 2>/dev/null || true
+          [ -f netlify.toml ] && cp netlify.toml _site/ || true
+
+      - name: Deploy to Netlify
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_TOKEN }}
+        run: npx netlify-cli@17 deploy --prod --dir=_site --site=${{ secrets.NETLIFY_SITE_ID }} --message="Daily data update $(date -u +%F)"

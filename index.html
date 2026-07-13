@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>zdrowysen – regeneracja i gotowość</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0b0f19;--surface:#151e2e;--surface2:#1e293b;
+  --border:#334155;--border2:#475569;
+  --text:#f8fafc;--text2:#cbd5e1;--dim:#94a3b8;
+  --accent:#3b82f6;--good:#10b981;--warn:#f59e0b;--danger:#ef4444;
+  --bike:#a855f7;--walk:#06b6d4;
+  --mono:'Space Mono',monospace;--sans:'Syne',sans-serif;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.6;min-height:100vh;padding:20px}
+.app{max-width:1200px;margin:0 auto}
+
+header{display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:2px solid var(--border);margin-bottom:24px;flex-wrap:wrap;gap:8px}
+.logo{font-size:20px;font-weight:700}
+.logo span{color:var(--danger)}.logo small{font-family:var(--mono);font-size:10px;color:var(--dim);display:block}
+.header-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:11px;padding:8px 14px;border-radius:6px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+
+.status-card{border-radius:12px;padding:24px;margin-bottom:24px;position:relative;overflow:hidden}
+.status-card::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45)}
+.status-verdict{font-size:28px;font-weight:700;margin-bottom:4px;position:relative;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.5)}
+.status-metrics{display:flex;gap:20px;flex-wrap:wrap;margin-top:12px;position:relative}
+.status-metrics>div{font-family:var(--mono);font-size:12px;line-height:1.4;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.4)}
+.status-metrics .num{font-size:18px;font-weight:700;display:block}
+.status-metrics .bad{color:#fca5a5}.status-metrics .good{color:#6ee7b7}.status-metrics .neutral{color:#fde68a}
+.status-reasons{font-size:12px;color:#fff;margin-top:8px;position:relative;text-shadow:0 1px 3px rgba(0,0,0,.4);line-height:1.5}
+
+.section{margin-bottom:32px}
+.section-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text2);margin-bottom:12px;border-left:3px solid var(--accent);padding-left:10px}
+.chart-box{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px}
+
+.explain{font-size:12px;color:var(--dim);margin-top:8px;cursor:pointer;user-select:none}
+.explain:hover{color:var(--text2)}
+.explain-body{display:none;font-size:12px;color:var(--text2);margin-top:6px;padding:12px;background:var(--surface2);border-radius:6px;line-height:1.7}
+.explain-body.open{display:block}
+.explain-body strong{color:var(--text)}
+.section-title{cursor:pointer;user-select:none}
+.section-title .def-text{display:none;font-size:11px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim);padding:8px 10px;margin-top:8px;background:var(--surface);border-radius:6px;line-height:1.5;letter-spacing:.3px}
+.section-title.show-def .def-text{display:block}
+.section-title .def-icon{font-size:11px;margin-left:6px;color:var(--dim);opacity:.5}
+
+/* correlation cards */
+.corr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:10px;margin-bottom:16px}
+.corr-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.corr-vars{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:2px}
+.corr-vars .var{color:var(--text2);font-weight:600;letter-spacing:0}
+.corr-vars .arrow{color:var(--accent);font-size:14px;font-weight:700}
+.corr-value{font-size:13px;font-weight:600;line-height:1.4}
+.corr-value .pos{color:var(--good)}.corr-value .neg{color:var(--danger)}.corr-value .neutral{color:var(--warn)}
+.corr-strength{font-size:10px;color:var(--dim)}
+
+@media(max-width:640px){
+  .status-verdict{font-size:22px}
+  .status-metrics{flex-direction:column;gap:8px}
+  .corr-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+<header>
+  <div class="logo">❤️ <span>zdrowysen</span><small>analiza regeneracji i gotowości</small></div>
+  <div class="header-right">
+    <select id="rangeSelect" onchange="changeRange()">
+      <option value="7">7 dni</option>
+      <option value="14">14 dni</option>
+      <option value="30" selected>30 dni</option>
+      <option value="60">60 dni</option>
+      <option value="90">90 dni</option>
+      <option value="0">Całość</option>
+    </select>
+    <button class="btn" onclick="init()">⟳</button>
+    <span id="lastSynced" style="font-family:var(--mono);font-size:10px;color:var(--dim)"></span>
+  </div>
+</header>
+
+<div id="statusCard" class="status-card" style="display:none">
+  <div class="status-verdict" id="statusVerdict"></div>
+  <div class="status-metrics" id="statusMetrics"></div>
+  <div class="status-reasons" id="statusReasons"></div>
+</div>
+
+<!-- RECOVERY: HRV -->
+<div class="section">
+  <div class="section-title" onclick="this.classList.toggle('show-def')">📈 Regeneracja – HRV (zmienność rytmu serca)<span class="def-icon">ⓘ</span>
+    <span class="def-text"><strong>HRV</strong> (Heart Rate Variability) – odstępy między kolejnymi uderzeniami serca. Wysokie HRV = układ przywspółczulny aktywny, organizm odpoczywa. Niskie HRV = stres, zmęczenie. To najważniejszy wskaźnik regeneracji. Ważny jest trend względem średniej 7-dniowej.</span>
+  </div>
+  <div class="chart-box"><canvas id="hrvChart"></canvas></div>
+  <div class="explain" onclick="toggle(this)">❓ Czym jest HRV i co oznacza &darr;</div>
+  <div class="explain-body"><strong>HRV (Heart Rate Variability)</strong> – zmienność odstępów między uderzeniami serca. <br><br>
+  ✅ <strong>Wysokie HRV</strong> (powyżej średniej 7d) → organizm zregenerowany, gotowy do wysiłku. <span style="color:var(--good)">Zielone słupki</span>.<br>
+  ❌ <strong>Niskie HRV</strong> (poniżej średniej 7d) → zmęczenie, stres, infekcja lub przetrenowanie. <span style="color:var(--danger)">Czerwone słupki</span>.<br><br>
+  <span style="color:var(--bike)">● Fioletowe punkty</span> = dni z wycieczką rowerową.
+  </div>
+</div>
+
+<!-- RHR -->
+<div class="section">
+  <div class="section-title" onclick="this.classList.toggle('show-def')">📈 Regeneracja – RHR (tętno spoczynkowe)<span class="def-icon">ⓘ</span>
+    <span class="def-text"><strong>RHR</strong> (Resting Heart Rate / tętno spoczynkowe) – najniższe tętno w ciągu doby (mierzone podczas snu). Niskie = wydajne serce, dobra regeneracja. Podwyższenie o 3-5 bpm powyżej normy = organizm walczy (zmęczenie, infekcja, stres). Powrót do normy = gotowość.</span>
+  </div>
+  <div class="chart-box"><canvas id="rhrChart"></canvas></div>
+  <div class="explain" onclick="toggle(this)">❓ Czym jest RHR i co oznacza &darr;</div>
+  <div class="explain-body"><strong>RHR (Resting Heart Rate)</strong> – najniższe tętno w ciągu dnia (podczas snu).<br><br>
+  ✅ <strong>Niskie RHR</strong> → serce pracuje ekonomicznie, organizm wypoczęty.<br>
+  ❌ <strong>Podwyższone RHR</strong> (>3 bpm ponad średnią 7d) → niedoregenerowanie, stres lub początek choroby.<br><br>
+  <span style="color:var(--danger)">Czerwone słupki</span> = RHR podwyższone ≥3 bpm vs średnia 7d.
+  </div>
+</div>
+
+<!-- COMBINED HEART -->
+<div class="section">
+  <div class="section-title" onclick="this.classList.toggle('show-def')">💓 Tętno – wszystkie wskaźniki + średnie kroczące<span class="def-icon">ⓘ</span>
+    <span class="def-text">Znormalizowane (0-100%) zestawienie <strong>RHR, HRV, hrAvg i hrMax</strong>. Linie kreskowane = średnia 7d i 30d. Pomaga zobaczyć ogólny trend regeneracji. Gdy RHR rośnie a HRV spada = organizm przeciążony.</span>
+  </div>
+  <div class="chart-box"><canvas id="combinedHrChart"></canvas></div>
+  <div class="explain" onclick="toggle(this)">❓ Jak czytać ten wykres &darr;</div>
+  <div class="explain-body">
+  Łączny widok wszystkich wskaźników tętna ze średnimi kroczącymi:<br>
+  • <span style="color:#10b981">●</span> <strong>RHR</strong> (tętno spoczynkowe) – linia ciągła<br>
+  • <span style="color:#3b82f6">●</span> <strong>hrAvg</strong> (średnie dzienne) – linia ciągła<br>
+  • <span style="color:#f59e0b">●</span> <strong>HRV</strong> – linia ciągła<br>
+  • <span style="color:#ef4444">●</span> <strong>hrMax</strong> – linia przerywana<br>
+  • Linie kreskowane = średnia krocząca 7d i 30d dla każdego wskaźnika.<br><br>
+  Wszystkie wartości są <strong>znormalizowane</strong> (0-100%) by były porównywalne.
+  </div>
+</div>
+
+<!-- SLEEP -->
+<div class="section">
+  <div class="section-title" onclick="this.classList.toggle('show-def')">😴 Sen – regeneracja nocna<span class="def-icon">ⓘ</span>
+    <span class="def-text"><strong>Sleep Score</strong> – jakość snu w skali 0-100. Składowe: czas trwania (40 pkt), sen głęboki (30 pkt), REM (30 pkt). ≥75 = świetna noc, 50-74 = przeciętna, &lt;50 = słaba regeneracja. Sen <strong>głęboki</strong> (Deep) – regeneracja fizyczna. <strong>REM</strong> – regeneracja psychiczna, konsolidacja pamięci.</span>
+  </div>
+  <div class="chart-box"><canvas id="sleepChart"></canvas></div>
+  <div class="explain" onclick="toggle(this)">❓ Odczytywanie wykresu snu &darr;</div>
+  <div class="explain-body">
+  Przezroczyste słupki pokazują fazy snu w minutach:<br>
+  • <span style="color:#4f46e5">■</span> <strong>Sen lekki</strong><br>
+  • <span style="color:#a855f7">■</span> <strong>REM</strong> – regeneracja psychiczna<br>
+  • <span style="color:#1e293b">■</span> <strong>Sen głęboki</strong> – regeneracja fizyczna<br>
+  • <span style="color:#10b981">●</span> <strong>Sleep Score</strong> (0-100, prawa oś). ≥75 = świetnie, &lt;50 = słabo.<br>
+  • <span style="color:#f59e0b">●</span> Pomarańczowa linia = średnia 7d sleep score.
+  </div>
+</div>
+
+<!-- TRAINING LOAD -->
+<div class="section">
+  <div class="section-title" onclick="this.classList.toggle('show-def')">🏋️ Obciążenie treningowe i równowaga<span class="def-icon">ⓘ</span>
+    <span class="def-text"><strong>TLR</strong> (Training Load Ratio) – stosunek obciążenia treningowego z ostatnich 7 dni do średniej z 28 dni. Wartość 1.0 = równowaga. &lt;1.0 = odciążenie/regeneracja. 1.0-1.5 = optymalny rozwój. &gt;1.5 = ryzyko przetrenowania. Czerwona przerywana linia = próg przetrenowania (TLR=1.5).</span>
+  </div>
+  <div class="chart-box"><canvas id="loadChart"></canvas></div>
+  <div class="explain" onclick="toggle(this)">❓ Co oznaczają te wskaźniki &darr;</div>
+  <div class="explain-body">
+  • <span style="color:var(--good)">■</span> <strong>TLR (Training Load Ratio)</strong> – stosunek obciążenia 7d do średniej z 28d. &lt;1 = regeneracja, &gt;1.5 = ryzyko.<br>
+  • <span style="color:var(--warn)">■</span> <strong>Tired Rate</strong> – subiektywna miara zmęczenia (prawa oś).<br>
+  <span style="color:var(--bike)">● Fioletowe punkty</span> = dni z rowerem.
+  </div>
+</div>
+
+<!-- ACTIVITY + STEPS -->
+<div class="section">
+  <div class="section-title" onclick="this.classList.toggle('show-def')">🚴 Kroki dzienne a tętno spoczynkowe<span class="def-icon">ⓘ</span>
+    <span class="def-text">Słupki = <strong>kroki</strong> dzienne. <strong>RHR</strong> (odwrócone, prawa oś) – gdy linia idzie w górę, tętno spoczynkowe spada (dobrze). Gdy RHR rośnie mimo małej aktywności = zmęczenie lub stres. Fioletowe punkty = dni z rowerem.</span>
+  </div>
+  <div class="chart-box"><canvas id="activityChart"></canvas></div>
+  <div class="explain" onclick="toggle(this)">❓ Co widać na wykresie &darr;</div>
+  <div class="explain-body">
+  • Słupki = <strong>kroki</strong> dzienne.<br>
+  • <span style="color:#10b981">●</span> Zielona linia = RHR (tętno spoczynkowe) – prawa oś, odwrócona (w górę = lepiej).<br>
+  • Gdy słupki kroków rosną a RHR spada → dobra regeneracja mimo wysiłku.<br>
+  • Gdy RHR rośnie mimo małej aktywności → możliwe zmęczenie lub stres.<br>
+  • Współczynnik korelacji Pearsona pokazuje siłę związku krok&harr;RHR.
+  </div>
+</div>
+
+<!-- CORRELATIONS -->
+<div class="section">
+  <div class="section-title" onclick="this.classList.toggle('show-def')">🔍 Automatyczne korelacje – co wpływa na regenerację?<span class="def-icon">ⓘ</span>
+    <span class="def-text"><strong>Korelacja Pearsona (r)</strong> – mierzy liniową zależność między dwoma zmiennymi od -1 do +1. Im wartość bliższa +1 lub -1, tym silniejszy związek. r ≈ 0 = brak związku. <strong>Porównania warunkowe</strong> – średnie wartości HRV/RHR w podgrupach (np. dni aktywne vs leniwe).</span>
+  </div>
+  <div id="correlationCards" class="corr-grid">
+    <div style="color:var(--dim);font-size:12px;padding:12px">Analizuję dane…</div>
+  </div>
+  <div class="explain" onclick="toggle(this)">❓ Jak działają korelacje &darr;</div>
+  <div class="explain-body">
+  Algorytm szuka zależności między różnymi wskaźnikami:<br>
+  • <strong>Korelacja Pearsona</strong> – mierzy liniową zależność między dwoma zmiennymi (od -1 do +1). Wartości bliższe +1 lub -1 = silniejszy związek.<br>
+  • <strong>Porównanie warunkowe</strong> – jak zmienia się HRV/RHR gdy np. kroki > 10000 vs < 5000.<br>
+  • Im więcej danych, tym bardziej wiarygodne korelacje.
+  </div>
+</div>
+
+<!-- /end sections -->
+
+<div id="loading" style="text-align:center;padding:60px 0;color:var(--dim);font-family:var(--mono)">Ładowanie danych…</div>
+</div>
+
+<script>
+const SHEET_ID = "1xPJ8xBAPsDv2NfZaKNtzcv6g8hYCVuA40A9iPKN--eo";
+const SHEETS = { activity:"1277227831", sleep:"1078830", vitals:"111422029", body:"1828589559" };
+
+const toN = v => v==null||v===""?null:parseFloat(String(v).replace(",","."));
+const pDate = v => {
+  if(!v)return null;
+  const s=v.trim().split(" ")[0];
+  let m=s.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+  if(m)return new Date(+m[3],+m[2]-1,+m[1]);
+  m=s.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if(m)return new Date(+m[1],+m[2]-1,+m[3]);
+  return null;
+};
+
+let allData = { days: [], _syncedAt: null };
+let charts = {};
+
+async function loadJSON() {
+  const r = await fetch("data.json");
+  if(!r.ok) throw new Error("no data.json");
+  const raw = await r.json();
+  if(Array.isArray(raw)) return { days: raw, _syncedAt: null };
+  return raw;
+}
+
+async function loadGoogleSheets() {
+  const p = (t,cb)=>{const rows=t.split("\n").slice(1).filter(Boolean).map(l=>{const v=l.split(",").map(x=>x.trim().replace(/^"+|"+$/g,''));const o={};cb.forEach((k,i)=>o[k]=v[i]);return o;});return rows;};
+  const fe = async gid => {const r=await fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`);return r.text();};
+  const actR = p(await fe(SHEETS.activity),["date","steps","distance","calories","exercise","source"]);
+  const slpR = p(await fe(SHEETS.sleep),["date","deep","rem","light","source"]);
+  const vitR = p(await fe(SHEETS.vitals),["date","min","max","avg","hrv","rhr","source"]);
+  const bodR = p(await fe(SHEETS.body),["date","weight"]);
+  const map={};
+  const ensure=k=>{if(!map[k])map[k]={date:k};return k;};
+  actR.forEach(r=>{
+    const k=ensure(pDate(r.date).toISOString().slice(0,10));
+    const st=toN(r.steps);if(st!=null)map[k].steps=Math.max(map[k].steps||0,st);
+    const ca=toN(r.calories);if(ca!=null)map[k].cal=Math.max(map[k].cal||0,ca);
+    const d=toN(r.distance);if(d!=null)map[k].dist=d/1000;
+    if(r.exercise){if(!map[k].exerciseNames)map[k].exerciseNames=[];map[k].exerciseNames.push(r.exercise.toLowerCase());}
+  });
+  slpR.forEach(r=>{
+    if(r.source&&!r.source.toLowerCase().includes("coros"))return;
+    const k=ensure(pDate(r.date).toISOString().slice(0,10));
+    const d=toN(r.deep)||0,r2=toN(r.rem)||0,l=toN(r.light)||0;
+    if(d+r2+l>0){map[k].deep=(map[k].deep||0)+d;map[k].rem=(map[k].rem||0)+r2;map[k].light=(map[k].light||0)+l;map[k].sleepH=Math.round(((map[k].deep||0)+(map[k].rem||0)+(map[k].light||0))/60*10)/10;}
+  });
+  vitR.forEach(r=>{
+    if(r.source&&!r.source.toLowerCase().includes("coros"))return;
+    const k=ensure(pDate(r.date).toISOString().slice(0,10));
+    if(toN(r.min)!=null)map[k].hrMin=toN(r.min);
+    if(toN(r.max)!=null)map[k].hrMax=toN(r.max);
+    if(toN(r.avg)!=null)map[k].hrAvg=toN(r.avg);
+  });
+  vitR.forEach(r=>{
+    if(!r.source||!r.source.toLowerCase().includes("healthsync"))return;
+    const k=pDate(r.date)?.toISOString().slice(0,10);if(!k)return;
+    ensure(k);
+    if(toN(r.hrv)!=null)map[k].hrv=toN(r.hrv);
+    if(toN(r.rhr)!=null)map[k].restingHr=toN(r.rhr);
+  });
+  bodR.forEach(r=>{
+    const k=ensure(pDate(r.date||r.time)?.toISOString().slice(0,10));
+    const w=toN(r.weight);if(w)map[k].weight=w;
+  });
+  return { days: Object.values(map), _syncedAt: null };
+}
+
+function computeRollingAvgs(data) {
+  data.forEach((r,i)=>{
+    const s7 = data.slice(Math.max(0,i-6),i+1).filter(Boolean);
+    const s30 = data.slice(Math.max(0,i-29),i+1).filter(Boolean);
+    const avg = (arr,key,n) => {const v=arr.map(x=>x[key]).filter(x=>x!=null);return v.length>=n?v.reduce((a,b)=>a+b,0)/v.length:null;};
+    r._a7hrv = avg(s7,'hrv',1);
+    r._a30hrv = avg(s30,'hrv',7);
+    r._a7rhr = avg(s7,'restingHr',1);
+    r._a30rhr = avg(s30,'restingHr',7);
+    r._a7hrMin = avg(s7,'hrMin',1);
+    r._a30hrMin = avg(s30,'hrMin',7);
+    r._a7hrAvg = avg(s7,'hrAvg',1);
+    r._a30hrAvg = avg(s30,'hrAvg',7);
+    r._a7hrMax = avg(s7,'hrMax',1);
+    r._a30hrMax = avg(s30,'hrMax',7);
+    r._a7sleepScore = avg(s7,'sleepScore',1);
+    r._a30sleepScore = avg(s30,'sleepScore',7);
+    r._a7steps = avg(s7,'steps',1);
+    r._a30steps = avg(s30,'steps',7);
+    if(r.hrv!=null && r._a7hrv!=null) r._hrvDevPct = (r.hrv - r._a7hrv) / r._a7hrv;
+    if(r.restingHr!=null && r._a7rhr!=null) r._rhrDevAbs = r.restingHr - r._a7rhr;
+  });
+}
+
+function calcStatus(r,prev) {
+  if(!r) return {label:'Brak danych',color:'#64748b',emoji:'❓',score:0};
+  let sc=0,reasons=[];
+  if(r.hrv!=null&&r._a7hrv!=null){
+    if(r.hrv>r._a7hrv*1.05){sc+=2;reasons.push(`HRV +${Math.round((r.hrv/r._a7hrv-1)*100)}% vs 7d – regeneracja OK`);}
+    else if(r.hrv<r._a7hrv*0.85){sc-=2;reasons.push(`HRV -${Math.round((1-r.hrv/r._a7hrv)*100)}% vs 7d – możliwe zmęczenie/stres`);}
+    else if(r.hrv<r._a7hrv*0.95){sc-=1;reasons.push(`HRV nieco poniżej średniej`);}
+    else{sc+=1;reasons.push(`HRV stabilne`);}
+  }
+  if(r.restingHr!=null&&r._a7rhr!=null){
+    const d=r.restingHr-r._a7rhr;
+    if(d<=0){sc+=1;reasons.push(`RHR w normie (${r.restingHr} bpm)`);}
+    else if(d>=3){sc-=2;reasons.push(`RHR podwyższone +${d} bpm vs 7d – niedoregenerowanie`);}
+    else{sc-=1;reasons.push(`RHR lekko podwyższone +${d} bpm`);}
+  }
+  if(r.sleepScore!=null){
+    if(r.sleepScore>=75)sc+=1;else if(r.sleepScore<50)sc-=1;
+  }
+  if(prev&&prev.exerciseNames){
+    const isBike=prev.exerciseNames.some(n=>/szosa|bik.*ing|cycling|rower|road.*bike|e.?bike|sport.?3|jazda|ride/.test(n));
+    if(isBike&&sc>0)reasons.push('🚴 Po wczorajszym rowerze – regeneracja przebiega prawidłowo');
+  }
+  if(r.trainingLoadRatio!=null){
+    if(r.trainingLoadRatio>1.5){sc-=1;reasons.push(`Training Load Ratio=${r.trainingLoadRatio.toFixed(2)} – powyżej progu przetrenowania`);}
+  }
+  if(sc>=2)return{label:'Wypoczęty',color:'#10b981',emoji:'💪',score:sc,reasons};
+  if(sc>=0)return{label:'Lekko zmęczony',color:'#eab308',emoji:'😐',score:sc,reasons};
+  if(sc>=-2)return{label:'Zmęczony',color:'#f97316',emoji:'😩',score:sc,reasons};
+  return{label:'Przetrenowanie / Stres',color:'#ef4444',emoji:'🤒',score:sc,reasons};
+}
+
+function processData(raw, range) {
+  let data = raw.filter(r=>r.date).sort((a,b)=>a.date.localeCompare(b.date));
+  const fields = ['steps','cal','dist','hrAvg','hrMin','hrMax','deep','rem','light','awake','sleepH','sleepScore','hrv','restingHr','weight','trainingLoad','trainingLoadRatio','ati','cti','tib'];
+  data.forEach(r=>{fields.forEach(f=>{if(!(f in r))r[f]=null;});if(!r.exerciseNames)r.exerciseNames=[];});
+  computeRollingAvgs(data);
+  if(range>0&&range<data.length)data=data.slice(-range);
+  return data;
+}
+
+function norm(arr) {
+  const vals = arr.filter(v=>v!=null);
+  if(!vals.length) return arr.map(()=>null);
+  const mn = Math.min(...vals), mx = Math.max(...vals);
+  const rng = mx-mn||1;
+  return arr.map(v=>v!=null?(v-mn)/rng*100:null);
+}
+
+function pearsonR(xArr, yArr) {
+  const n = Math.min(xArr.length, yArr.length);
+  const pairs = []; for(let i=0;i<n;i++) if(xArr[i]!=null&&yArr[i]!=null) pairs.push([xArr[i],yArr[i]]);
+  const m = pairs.length; if(m<3) return null;
+  let sx=0,sy=0,sxy=0,sx2=0,sy2=0;
+  for(const [x,y] of pairs){sx+=x;sy+=y;sxy+=x*y;sx2+=x*x;sy2+=y*y;}
+  const r = (m*sxy-sx*sy)/Math.sqrt((m*sx2-sx*sx)*(m*sy2-sy*sy));
+  return r;
+}
+
+function compareCondition(data, metric, condition) {
+  const yes = [], no = [];
+  for(const r of data){
+    if(r[metric]==null) continue;
+    if(condition(r)) yes.push(r[metric]); else no.push(r[metric]);
+  }
+  const avg = a => a.length? a.reduce((s,v)=>s+v,0)/a.length : null;
+  return { yesAvg: avg(yes), noAvg: avg(no), yesCount: yes.length, noCount: no.length };
+}
+
+function descCorr(r, posDesc, negDesc, neutralDesc) {
+  if(r==null||isNaN(r)) return neutralDesc||'brak danych';
+  return r > 0.2 ? posDesc : r < -0.2 ? negDesc : (neutralDesc||'bez wyraźnego związku');
+}
+function pctDiff(v1, v2) {
+  if(!v1||!v2) return '';
+  const d = ((v1-v2)/v2*100);
+  return (d>0?'+':'') + d.toFixed(0) + '%';
+}
+
+function fmtR(r) { return 'r ' + (r>=0?'+':'') + r.toFixed(2); }
+
+function strength(r) {
+  var a=Math.abs(r);
+  return a>0.5?'silna':a>0.3?'umiarkowana':'słaba';
+}
+function dirDesc(r, pos, neg) {
+  if(r==null||isNaN(r)) return 'brak danych';
+  return r>0?pos:r<0?neg:'brak wyraźnego związku';
+}
+
+function findCorrelations(data) {
+  var out = [];
+
+  function pushPearson(label, var1, var2, xArr, yArr) {
+    var n=xArr.length;
+    if(n<5) return;
+    var sx=0,sy=0,sxy=0,sx2=0,sy2=0;
+    for(var i=0;i<n;i++){var xv=xArr[i],yv=yArr[i];sx+=xv;sy+=yv;sxy+=xv*yv;sx2+=xv*xv;sy2+=yv*yv;}
+    var r = (n*sxy-sx*sy)/Math.sqrt((n*sx2-sx*sx)*(n*sy2-sy*sy));
+    if(isNaN(r)) return;
+    var rSign = r>=0?'dodatnia':'ujemna';
+    var s = strength(r);
+    var desc = 'związek '+rSign+', '+s;
+    var dirTxt = r>0.2?' (obie rosną razem)':r<-0.2?' (gdy X rośnie, Y maleje)':' (brak wyraźnego kierunku)';
+    out.push({
+      var1:var1, var2:var2, r:r,
+      arrow: r>0?'↗':'↘',
+      desc: dirDesc(r, var1+' ↗ = '+var2+' ↗', var1+' ↗ = '+var2+' ↘'),
+      detail: desc+' ('+fmtR(r)+')'+dirTxt
+    });
+  }
+
+  // steps vs next-day RHR
+  var sr_x=[],sr_y=[];
+  for(var i=0;i<data.length-1;i++) if(data[i].steps!=null&&data[i+1].restingHr!=null){sr_x.push(data[i].steps);sr_y.push(data[i+1].restingHr);}
+  pushPearson('','Kroki (dzisiaj)','RHR (nast. dzień)',sr_x,sr_y);
+
+  // steps vs HRV next day
+  var sh_x=[],sh_y=[];
+  for(var i=0;i<data.length-1;i++) if(data[i].steps!=null&&data[i+1].hrv!=null){sh_x.push(data[i].steps);sh_y.push(data[i+1].hrv);}
+  pushPearson('','Kroki (dzisiaj)','HRV (nast. dzień)',sh_x,sh_y);
+
+  // HRV vs Sleep Score (same day)
+  var hs_x=[],hs_y=[];
+  for(var i=0;i<data.length;i++) if(data[i].hrv!=null&&data[i].sleepScore!=null){hs_x.push(data[i].hrv);hs_y.push(data[i].sleepScore);}
+  pushPearson('','HRV','Sleep Score',hs_x,hs_y);
+
+  // Steps vs Sleep Score (next day)
+  var ss_x=[],ss_y=[];
+  for(var i=0;i<data.length-1;i++) if(data[i].steps!=null&&data[i+1].sleepScore!=null){ss_x.push(data[i].steps);ss_y.push(data[i+1].sleepScore);}
+  pushPearson('','Kroki (dzisiaj)','Sleep Score (nast. noc)',ss_x,ss_y);
+
+  // HRV vs RHR
+  var hr_x=[],hr_y=[];
+  for(var i=0;i<data.length;i++) if(data[i].hrv!=null&&data[i].restingHr!=null){hr_x.push(data[i].hrv);hr_y.push(data[i].restingHr);}
+  pushPearson('','HRV','RHR',hr_x,hr_y);
+
+  // TLR vs HRV (next day)
+  var th_x=[],th_y=[];
+  for(var i=0;i<data.length-1;i++) if(data[i].trainingLoadRatio!=null&&data[i+1].hrv!=null){th_x.push(data[i].trainingLoadRatio);th_y.push(data[i+1].hrv);}
+  pushPearson('','TLR (obciążenie)','HRV (nast. dzień)',th_x,th_y);
+
+  // Sleep Score vs next day RHR
+  var srr_x=[],srr_y=[];
+  for(var i=0;i<data.length-1;i++) if(data[i].sleepScore!=null&&data[i+1].restingHr!=null){srr_x.push(data[i].sleepScore);srr_y.push(data[i+1].restingHr);}
+  pushPearson('','Sleep Score','RHR (nast. dzień)',srr_x,srr_y);
+
+  // bike days vs non-bike HRV (same day)
+  var bikeDays = data.filter(function(r){return r.exerciseNames&&r.exerciseNames.some(function(n){return /szosa|bik.*ing|cycling|rower|road.*bike|e.?bike|sport.?3|jazda|ride/.test(n);})&&r.hrv!=null;}).map(function(r){return r.hrv;});
+  var noBike = data.filter(function(r){return !r.exerciseNames||!r.exerciseNames.some(function(n){return /szosa|bik.*ing|cycling|rower|road.*bike|e.?bike|sport.?3|jazda|ride/.test(n);});}).filter(function(r){return r.hrv!=null;}).map(function(r){return r.hrv;});
+  if(bikeDays.length>=3&&noBike.length>=3){
+    var ba = bikeDays.reduce(function(s,v){return s+v;},0)/bikeDays.length;
+    var nba = noBike.reduce(function(s,v){return s+v;},0)/noBike.length;
+    out.push({
+      var1:'Dzień z rowerem', var2:'Dzień bez roweru',
+      r:null, arrow:ba>nba?'+':'-',
+      desc:'HRV: '+ba.toFixed(0)+' ms vs '+nba.toFixed(0)+' ms',
+      detail:'różnica '+pctDiff(ba,nba)+' ('+ba.toFixed(0)+'/'+nba.toFixed(0)+' ms)'
+    });
+  }
+
+  // High vs low step days -> RHR
+  var hRHR = data.filter(function(r){return r.steps!=null&&r.steps>12000&&r.restingHr!=null;}).map(function(r){return r.restingHr;});
+  var lRHR = data.filter(function(r){return r.steps!=null&&r.steps<5000&&r.restingHr!=null;}).map(function(r){return r.restingHr;});
+  if(hRHR.length>=3&&lRHR.length>=3){
+    var ha = hRHR.reduce(function(s,v){return s+v;},0)/hRHR.length;
+    var la = lRHR.reduce(function(s,v){return s+v;},0)/lRHR.length;
+    var diff = ha - la;
+    out.push({
+      var1:'>12k kroków', var2:'<5k kroków',
+      r:null, arrow:diff<0?'↓':'↑',
+      desc:'RHR: '+ha.toFixed(0)+' vs '+la.toFixed(0)+' bpm',
+      detail: diff<0?'niższe o '+Math.abs(diff).toFixed(1)+' bpm (dobrze)':'wyższe o '+diff.toFixed(1)+' bpm'
+    });
+  }
+
+  // averages
+  var stepVals = data.map(function(r){return r.steps;}).filter(function(v){return v!=null&&v>0;});
+  var avgSteps = stepVals.length ? Math.round(stepVals.reduce(function(s,v){return s+v;},0)/stepVals.length) : null;
+  if(avgSteps) out.push({var1:'Śr. kroków', var2:'dziennie', r:null, arrow:'', desc:avgSteps.toLocaleString('pl'), detail:''});
+  var hrvVals = data.map(function(r){return r.hrv;}).filter(function(v){return v!=null;});
+  if(hrvVals.length>=3) out.push({var1:'Śr. HRV', var2:'', r:null, arrow:'', desc:Math.round(hrvVals.reduce(function(s,v){return s+v;},0)/hrvVals.length)+' ms', detail:''});
+  var rhrVals = data.map(function(r){return r.restingHr;}).filter(function(v){return v!=null;});
+  if(rhrVals.length>=3) out.push({var1:'Śr. RHR', var2:'', r:null, arrow:'', desc:Math.round(rhrVals.reduce(function(s,v){return s+v;},0)/rhrVals.length)+' bpm', detail:''});
+
+  // sort: correlations by |r| desc, then non-r entries
+  out.sort(function(a,b){
+    if(a.r!=null&&b.r!=null) return Math.abs(b.r)-Math.abs(a.r);
+    if(a.r!=null) return -1;
+    if(b.r!=null) return 1;
+    return 0;
+  });
+  return out;
+}
+
+const chartOpts = {
+  responsive:true,maintainAspectRatio:false,
+  plugins:{legend:{labels:{color:'#94a3b8',font:{family:"'Space Mono'",size:10}}}},
+  scales:{x:{ticks:{color:'#64748b',maxTicksLimit:15,font:{size:10}},grid:{color:'#1e293b'}},
+           y:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#1e293b'}}}
+};
+
+function renderHrvChart(data) {
+  const ctx=document.getElementById('hrvChart');
+  const labels=data.map(r=>r.date.slice(5));
+  const hrv=data.map(r=>r.hrv);
+  const avg7=data.map(r=>r._a7hrv);
+  const bikes=data.map(r=>r.exerciseNames&&r.exerciseNames.some(n=>/szosa|bik.*ing|cycling|rower|road.*bike|e.?bike|sport.?3|jazda|ride/.test(n))?r.hrv:null);
+  const walks=data.map(r=>r.exerciseNames&&r.exerciseNames.some(n=>/hiking|walking|spacer|wędrow/.test(n))?r.hrv:null);
+
+  new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        {
+          label:'HRV (ms)',data:hrv,
+          backgroundColor:hrv.map((v,i)=>{
+            if(v==null) return 'rgba(100,116,139,0.15)';
+            if(bikes[i]!=null) return 'rgba(168,85,247,0.6)';
+            if(walks[i]!=null) return 'rgba(6,182,212,0.5)';
+            if(avg7[i]!=null) return v<avg7[i] ? 'rgba(239,68,68,0.6)' : 'rgba(16,185,129,0.5)';
+            return 'rgba(59,130,246,0.4)';
+          }),
+          borderRadius:2
+        },
+        {label:'Średnia 7d',data:avg7,type:'line',borderColor:'#f59e0b',borderWidth:2,borderDash:[4,4],pointRadius:0,fill:false,tension:0.3},
+        {label:'Średnia 30d',data:data.map(r=>r._a30hrv),type:'line',borderColor:'#94a3b8',borderWidth:1.5,borderDash:[2,4],pointRadius:0,fill:false,tension:0.3}
+      ]
+    },
+    options:{...chartOpts,
+      plugins:{...chartOpts.plugins,
+        tooltip:{callbacks:{
+          label:ctx=>{
+            if(ctx.datasetIndex===0&&ctx.raw!=null){
+              const i=ctx.dataIndex;
+              const r=data[i];
+              let lines=[`HRV: ${ctx.raw} ms`];
+              if(r._a7hrv)lines.push(`Śr.7d: ${r._a7hrv.toFixed(0)} ms (${r._hrvDevPct>0?'+':''}${(r._hrvDevPct*100).toFixed(0)}%)`);
+              if(r._a30hrv)lines.push(`Śr.30d: ${r._a30hrv.toFixed(0)} ms`);
+              if(r.exerciseNames.length)lines.push(`🚴 ${r.exerciseNames.join(', ')}`);
+              return lines;
+            }
+            if(ctx.datasetIndex>=1&&ctx.raw!=null) return `${ctx.dataset.label}: ${ctx.raw.toFixed(0)} ms`;
+            return ctx.raw;
+          }
+        }}
+      },
+      scales:{...chartOpts.scales,
+        y:{...chartOpts.scales.y,title:{display:true,text:'ms',color:'#94a3b8',font:{size:10}}}
+      }
+    }
+  });
+}
+
+function renderRhrChart(data) {
+  const ctx=document.getElementById('rhrChart');
+  const labels=data.map(r=>r.date.slice(5));
+  const rhr=data.map(r=>r.restingHr);
+  const avg7=data.map(r=>r._a7rhr);
+  const avg30=data.map(r=>r._a30rhr);
+
+  new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        {
+          label:'RHR (bpm)',data:rhr,
+          backgroundColor:rhr.map((v,i)=>{
+            if(v==null) return 'rgba(100,116,139,0.2)';
+            if(avg7[i]!=null&&v>=avg7[i]+3) return 'rgba(239,68,68,0.5)';
+            return 'rgba(16,185,129,0.5)';
+          }),
+          borderRadius:2
+        },
+        {label:'Średnia 7d',data:avg7,type:'line',borderColor:'#f59e0b',borderWidth:2,borderDash:[4,4],pointRadius:0,fill:false,tension:0.3},
+        {label:'Średnia 30d',data:avg30,type:'line',borderColor:'#94a3b8',borderWidth:1.5,borderDash:[2,4],pointRadius:0,fill:false,tension:0.3}
+      ]
+    },
+    options:{...chartOpts,
+      plugins:{...chartOpts.plugins,
+        tooltip:{callbacks:{
+          label:ctx=>{
+            if(ctx.datasetIndex===0&&ctx.raw!=null){
+              const i=ctx.dataIndex;
+              const r=data[i];
+              let lines=[`RHR: ${ctx.raw} bpm`];
+              if(r._a7rhr&&r.restingHr!=null){
+                const d=r.restingHr-r._a7rhr;
+                lines.push(`Śr.7d: ${r._a7rhr.toFixed(0)} bpm (${d>0?'+':''}${d.toFixed(0)} bpm)`);
+              }
+              if(r._a30rhr) lines.push(`Śr.30d: ${r._a30rhr.toFixed(0)} bpm`);
+              return lines;
+            }
+            if(ctx.datasetIndex>=1&&ctx.raw!=null) return `${ctx.dataset.label}: ${ctx.raw.toFixed(0)} bpm`;
+            return ctx.raw;
+          }
+        }}
+      }
+    }
+  });
+}
+
+function renderCombinedHr(data) {
+  const ctx=document.getElementById('combinedHrChart');
+  const labels=data.map(r=>r.date.slice(5));
+  const normRHR = norm(data.map(r=>r.restingHr));
+  const normAvg = norm(data.map(r=>r.hrAvg));
+  const normHrv = norm(data.map(r=>r.hrv));
+  const normMax = norm(data.map(r=>r.hrMax));
+
+  new Chart(ctx,{
+    type:'line',
+    data:{
+      labels,
+      datasets:[
+        {label:'RHR (tętno spoczynkowe)',data:normRHR,borderColor:'#10b981',borderWidth:2,pointRadius:1,tension:0.3,fill:false},
+        {label:'HRV (zmienność rytmu)',data:normHrv,borderColor:'#f59e0b',borderWidth:2,pointRadius:1,tension:0.3,fill:false},
+        {label:'hrAvg (średnie dzienne)',data:normAvg,borderColor:'#3b82f6',borderWidth:2,pointRadius:1,tension:0.3,fill:false},
+        {label:'hrMax (szczytowe)',data:normMax,borderColor:'#ef4444',borderWidth:1.5,pointRadius:0,tension:0.3,borderDash:[4,4],fill:false}
+      ]
+    },
+    options:{...chartOpts,
+      plugins:{...chartOpts.plugins,
+        tooltip:{mode:'index',intersect:false,callbacks:{
+          label:ctx=>{
+            const r=data[ctx.dataIndex];
+            const vals = [r.restingHr,r.hrv,r.hrAvg,r.hrMax];
+            const raw = vals[ctx.datasetIndex];
+            if(raw==null) return null;
+            const unit = ctx.datasetIndex===1?' ms':' bpm';
+            return `${ctx.dataset.label}: ${raw}${unit}`;
+          }
+        }},
+        legend:{...chartOpts.plugins.legend,
+          onClick:(e,item,legend)=>{const idx=item.datasetIndex;const ci=legend.chart;const meta=ci.getDatasetMeta(idx);meta.hidden=meta.hidden===null?!ci.data.datasets[idx].hidden:null;ci.update();}
+        }
+      },
+      scales:{...chartOpts.scales,
+        y:{...chartOpts.scales.y,title:{display:true,text:'% normy (0-100)',color:'#94a3b8',font:{size:10}},min:0,max:100}
+      }
+    }
+  });
+}
+
+function renderSleepChart(data) {
+  const ctx=document.getElementById('sleepChart');
+  const labels=data.map(r=>r.date.slice(5));
+  const deep=data.map(r=>r.deep);
+  const rem=data.map(r=>r.rem);
+  const light=data.map(r=>r.light);
+  const score=data.map(r=>r.sleepScore);
+  const avg7=data.map(r=>r._a7sleepScore);
+
+  new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        {label:'Głęboki (min)',data:deep,backgroundColor:'rgba(30,41,59,0.5)',stack:'A',borderRadius:0},
+        {label:'REM (min)',data:rem,backgroundColor:'rgba(168,85,247,0.5)',stack:'A',borderRadius:0},
+        {label:'Lekki (min)',data:light,backgroundColor:'rgba(79,70,229,0.5)',stack:'A',borderRadius:0},
+        {label:'Sleep Score',data:score,type:'line',borderColor:'#10b981',borderWidth:3,pointRadius:3,pointBackgroundColor:'#10b981',tension:0.3,yAxisID:'y1',order:0},
+        {label:'Średnia 7d Sleep Score',data:avg7,type:'line',borderColor:'#f59e0b',borderWidth:2.5,borderDash:[4,4],pointRadius:0,fill:false,tension:0.3,yAxisID:'y1',order:0}
+      ]
+    },
+    options:{...chartOpts,
+      scales:{
+        y:{...chartOpts.scales.y,stacked:true,title:{display:true,text:'min',color:'#94a3b8',font:{size:10}}},
+        y1:{position:'right',title:{display:true,text:'Score',color:'#94a3b8',font:{size:10}},grid:{display:false},min:0,max:100,ticks:{color:'#64748b',font:{size:10}}}
+      },
+      plugins:{...chartOpts.plugins,tooltip:{mode:'index',intersect:false}}
+    }
+  });
+}
+
+function renderLoadChart(data) {
+  const ctx=document.getElementById('loadChart');
+  const labels=data.map(r=>r.date.slice(5));
+  const tlr=data.map(r=>r.trainingLoadRatio);
+  const tired=data.map(r=>r.tiredRateNew);
+  const bikes=data.map(r=>r.exerciseNames&&r.exerciseNames.some(n=>/szosa|bik.*ing|cycling|rower|road.*bike|e.?bike|sport.?3|jazda|ride/.test(n))?1.5:null);
+  const overreach=Array(labels.length).fill(1.5);
+
+  new Chart(ctx,{
+    type:'line',
+    data:{
+      labels,
+      datasets:[
+        {label:'TLR (wskaźnik obciążenia)',data:tlr,borderColor:'#10b981',borderWidth:1.5,pointRadius:0,tension:0.3},
+        {label:'Tired Rate (zmęczenie)',data:tired,borderColor:'#f59e0b',borderWidth:1.5,pointRadius:0,tension:0.3,yAxisID:'y1'},
+        {label:'Próg przetrenowania TLR=1.5',data:overreach,borderColor:'#ef4444',borderWidth:1.5,borderDash:[4,4],pointRadius:0,fill:false},
+        {label:'🚴 rower',data:bikes,type:'scatter',backgroundColor:'#a855f7',pointRadius:8,borderColor:'#a855f7',showLine:false}
+      ]
+    },
+    options:{...chartOpts,
+      scales:{
+        y:{...chartOpts.scales.y,title:{display:true,text:'TLR',color:'#94a3b8',font:{size:10}}},
+        y1:{position:'right',title:{display:true,text:'Tired Rate',color:'#94a3b8',font:{size:10}},grid:{display:false}}
+      }
+    }
+  });
+}
+
+function renderActivityChart(data) {
+  const ctx=document.getElementById('activityChart');
+  const labels=data.map(r=>r.date.slice(5));
+  const steps=data.map(r=>r.steps);
+  const rhr=data.map(r=>r.restingHr);
+  const bikes=data.map(r=>{
+    if(!r.exerciseNames||!r.exerciseNames.some(n=>/szosa|bik.*ing|cycling|rower|road.*bike|e.?bike|sport.?3|jazda|ride/.test(n)))return null;
+    return r.dist||(r.distance_m?r.distance_m/1000:null)||0.5;
+  });
+  const walks=data.map(r=>r.exerciseNames&&r.exerciseNames.some(n=>/hiking|walking|spacer|wędrow/.test(n))?0.5:null);
+
+  // Invert RHR so that "up is good"
+  const rhrMin = Math.min(...rhr.filter(v=>v!=null));
+  const rhrMax = Math.max(...rhr.filter(v=>v!=null));
+  const rhrRange = rhrMax - rhrMin || 1;
+  const rhrInv = rhr.map(v=>v!=null? rhrMax - (v - rhrMin) : null);
+
+  new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        {label:'Kroki',data:steps,backgroundColor:steps.map(v=>v!=null&&v>0?'rgba(59,130,246,0.5)':'rgba(100,116,139,0.15)'),borderRadius:2,order:1},
+        {label:'RHR (odwr.)',data:rhrInv,type:'line',borderColor:'#10b981',borderWidth:2,pointRadius:2,pointBackgroundColor:'#10b981',tension:0.3,yAxisID:'y1',fill:false,order:0},
+        {label:'🚴 km',data:bikes,type:'scatter',backgroundColor:'#a855f7',pointRadius:bikes.map(v=>v>20?8:5),pointBackgroundColor:'#a855f7',showLine:false,yAxisID:'y1',order:2},
+        {label:'🚶 spacer',data:walks,type:'scatter',backgroundColor:'#06b6d4',pointRadius:5,pointBackgroundColor:'#06b6d4',showLine:false,yAxisID:'y1',order:2}
+      ]
+    },
+    options:{...chartOpts,
+      scales:{
+        y:{...chartOpts.scales.y,title:{display:true,text:'kroki',color:'#94a3b8',font:{size:10}}},
+        y1:{position:'right',title:{display:true,text:'RHR (odwrócone)',color:'#94a3b8',font:{size:10}},grid:{display:false},
+            min:rhrMin-2,max:rhrMax+2,
+            ticks:{callback:v=>rhrMax-(v-rhrMin)}}
+      },
+      plugins:{...chartOpts.plugins,
+        tooltip:{callbacks:{
+          label:ctx=>{
+            if(ctx.datasetIndex===1&&ctx.raw!=null){
+              const origRhr = data[ctx.dataIndex].restingHr;
+              return `RHR: ${origRhr} bpm`;
+            }
+            return ctx.raw;
+          }
+        }}
+      }
+    }
+  });
+}
+
+function renderCorrelations(data) {
+  const el = document.getElementById('correlationCards');
+  const corrs = findCorrelations(data);
+  if(!corrs.length){
+    el.innerHTML = '<div style="color:var(--dim);font-size:12px;padding:12px">Za mało danych do analizy korelacji (minimum 5 dni z kompletnymi pomiarami).</div>';
+    return;
+  }
+  function aCls(a){return a=='↗'||a=='↓'||a=='+'?'pos':a=='↘'||a=='↑'||a=='-'?'neg':'neutral';}
+  el.innerHTML = corrs.map(c=>
+    `<div class="corr-card">
+      <div class="corr-vars">
+        <span class="var">${c.var1}</span>
+        ${c.var2?`<span class="arrow ${aCls(c.arrow)}">${c.arrow||'↔'}</span><span class="var">${c.var2}</span>`:''}
+      </div>
+      <div class="corr-value"><span class="${aCls(c.arrow)}">${c.desc}</span></div>
+      ${c.detail?`<div class="corr-strength">${c.detail}</div>`:''}
+    </div>`
+  ).join('');
+}
+
+function renderStatusCard(data) {
+  const card=document.getElementById('statusCard');
+  const today=data[data.length-1];
+  const yesterday=data.length>1?data[data.length-2]:null;
+  const refDay = (today&&today.sleepScore!=null)?today:(yesterday||today);
+  const status = calcStatus(refDay,yesterday);
+  
+  document.getElementById('statusVerdict').innerHTML = `${status.emoji} ${status.label}`;
+  card.style.background = status.color;
+  card.style.display='block';
+  
+  const mEl=document.getElementById('statusMetrics');
+  const parts=[];
+  if(refDay.hrv!=null){
+    const cls=refDay._hrvDevPct>0.05?'good':refDay._hrvDevPct<-0.05?'bad':'neutral';
+    parts.push(`<div>HRV (zmienność rytmu) <span class="num ${cls}">${refDay.hrv} ms</span>${refDay._a7hrv?` (śr.7d: ${refDay._a7hrv.toFixed(0)})`:''}</div>`);
+  }
+  if(refDay.restingHr!=null){
+    const d=refDay._rhrDevAbs;
+    const cls=d!=null&&d<=0?'good':d!=null&&d>=3?'bad':'neutral';
+    parts.push(`<div>RHR (tętno spoczynkowe) <span class="num ${cls}">${refDay.restingHr} bpm</span>${refDay._a7rhr?` (śr.7d: ${refDay._a7rhr.toFixed(0)})`:''}</div>`);
+  }
+  if(refDay.sleepScore!=null){
+    parts.push(`<div>Sen (jakość snu) <span class="num">${refDay.sleepScore} pkt</span></div>`);
+  }
+  if(refDay.trainingLoadRatio!=null){
+    parts.push(`<div>TLR (obciążenie treningowe) <span class="num">${refDay.trainingLoadRatio.toFixed(2)}</span></div>`);
+  }
+  mEl.innerHTML=parts.join('');
+  
+  const rEl=document.getElementById('statusReasons');
+  if(status.reasons&&status.reasons.length){
+    rEl.textContent='• '+status.reasons.join(' • ');
+  }else{
+    rEl.textContent='';
+  }
+}
+
+function toggle(el) {
+  const body=el.nextElementSibling;
+  body.classList.toggle('open');
+  el.innerHTML=body.classList.contains('open')?'❓ Schowaj wyjaśnienie ↑':'❓ Czym jest i co oznacza ↓';
+}
+
+let currentRange=30;
+
+function changeRange() {
+  currentRange=parseInt(document.getElementById('rangeSelect').value)||0;
+  render(currentRange);
+}
+
+function render(range) {
+  const data=processData(allData.days,range);
+  if(!data.length) return;
+  
+  Object.values(charts).forEach(c=>c.destroy());
+  charts={};
+  
+  renderStatusCard(data);
+  charts.hrvChart=renderHrvChart(data);
+  charts.rhrChart=renderRhrChart(data);
+  charts.combinedHr=renderCombinedHr(data);
+  charts.sleepChart=renderSleepChart(data);
+  charts.loadChart=renderLoadChart(data);
+  charts.activityChart=renderActivityChart(data);
+  renderCorrelations(data);
+}
+
+async function init() {
+  document.getElementById('loading').style.display='block';
+  let raw;
+  try{
+    raw=await loadJSON();
+    console.log('loaded data.json');
+  }catch(e){
+    console.log('data.json failed, fallback to Google Sheets');
+    try{
+      raw=await loadGoogleSheets();
+      console.log('loaded Google Sheets fallback');
+    }catch(e2){
+      document.getElementById('loading').innerHTML='❌ Nie udało się załadować danych.';
+      return;
+    }
+  }
+  allData=raw;
+  document.getElementById('loading').style.display='none';
+  
+  // Show sync timestamp
+  const syncEl = document.getElementById('lastSynced');
+  if(raw._syncedAt){
+    const d = new Date(raw._syncedAt);
+    syncEl.textContent = 'Synchronizacja: ' + d.toLocaleString('pl-PL');
+  } else {
+    syncEl.textContent = 'Odświeżono: ' + new Date().toLocaleString('pl-PL');
+  }
+  
+  render(currentRange);
+}
+
+init();
+</script>
+</body>
+</html>
