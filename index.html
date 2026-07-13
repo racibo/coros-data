@@ -1010,9 +1010,11 @@ function profileGroup(data, label, groupDays, icon) {
   var aHrv = allAvg('hrv');
   var aRhr = allAvg('restingHr');
   var aSleep = allAvg('sleepScore');
+  var aSteps = allAvg('steps');
   var aWeight = allAvg('weight');
   var aDist = allAvg('dist');
   var row = function(v, u, ref, hib) { return v!=null ? v.toFixed(v%1===0?0:1)+u + fmtPct(v, ref, hib) : '—'; };
+  var rowLocale = function(v, ref, hib) { return v!=null ? Math.round(v).toLocaleString('pl-PL') + fmtPct(v, ref, hib) : '—'; };
   var t = function(s) { return 'title="' + abbrTitle(s) + '"'; };
   var dateList = groupDays.map(function(r){return r.date.slice(5);}).sort().join(', ');
   var html = '<div class="corr-card">' +
@@ -1021,7 +1023,7 @@ function profileGroup(data, label, groupDays, icon) {
     '<tr><td style="color:var(--dim);padding:1px 4px" ' + t('HRV') + '>HRV</td><td style="text-align:right;padding:1px 4px">' + row(hrvAvg,' ms',aHrv,true) + '</td></tr>' +
     '<tr><td style="color:var(--dim);padding:1px 4px" ' + t('RHR') + '>RHR</td><td style="text-align:right;padding:1px 4px">' + row(rhrAvg,' bpm',aRhr,false) + '</td></tr>' +
     '<tr><td style="color:var(--dim);padding:1px 4px" ' + t('Sleep Score') + '>Sen</td><td style="text-align:right;padding:1px 4px">' + row(sleepAvg,' pkt',aSleep,true) + '</td></tr>' +
-    (stepsAvg!=null?'<tr><td style="color:var(--dim);padding:1px 4px">Kroki</td><td style="text-align:right;padding:1px 4px">' + Math.round(stepsAvg).toLocaleString('pl') + '</td></tr>':'') +
+    (stepsAvg!=null?'<tr><td style="color:var(--dim);padding:1px 4px">Kroki</td><td style="text-align:right;padding:1px 4px">' + rowLocale(stepsAvg, aSteps, true) + '</td></tr>':'') +
     (distAvg!=null?'<tr><td style="color:var(--dim);padding:1px 4px">Dystans</td><td style="text-align:right;padding:1px 4px">' + row(distAvg,' km',aDist,true) + '</td></tr>':'') +
     (weightAvg!=null?'<tr><td style="color:var(--dim);padding:1px 4px">Waga</td><td style="text-align:right;padding:1px 4px">' + row(weightAvg,' kg',aWeight,false) + '</td></tr>':'') +
     '</table>' +
