@@ -191,12 +191,29 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   </div>
 </div>
 
+<!-- WEIGHT -->
+<div class="section">
+  <div class="section-title" onclick="this.classList.toggle('show-def')">⚖️ Waga<span class="def-icon">ⓘ</span>
+    <span class="def-text"><strong>Waga</strong> – masa ciała w kg. Wyższa waga → większe obciążenie układu krążenia. W korelacjach sprawdzamy, czy waga wpływa na HRV, RHR i jakość snu.</span>
+  </div>
+  <div class="section-sub">Waga (kg) – im stabilniejsza, tym lepiej · wzrost wagi = większe obciążenie serca</div>
+  <div class="chart-box"><canvas id="weightChart"></canvas></div>
+  <div class="explain" onclick="toggle(this)">❓ Dlaczego waga ma znaczenie &darr;</div>
+  <div class="explain-body">
+  Waga ciała wpływa na układ krążenia:<br>
+  • Wyższa waga → serce musi pompować więcej krwi → wyższe RHR, niższe HRV.<br>
+  • Nawet niewielkie wahania wagi (1-2 kg) mogą wpływać na regenerację.<br>
+  • Brak danych = waga nie była mierzona w tym okresie.
+  </div>
+</div>
+
 <!-- CORRELATIONS -->
 <div class="section">
   <div class="section-title" onclick="this.classList.toggle('show-def')">🔍 Automatyczne korelacje – co wpływa na regenerację?<span class="def-icon">ⓘ</span>
     <span class="def-text"><strong>Korelacja Pearsona (r)</strong> – mierzy liniową zależność między dwoma zmiennymi od -1 do +1. Im wartość bliższa +1 lub -1, tym silniejszy związek. r ≈ 0 = brak związku. <strong>Porównania warunkowe</strong> – średnie wartości HRV/RHR w podgrupach (np. dni aktywne vs leniwe).</span>
   </div>
   <div class="section-sub"><span title="Korelacja Pearsona – miara liniowej zależności od -1 do +1">r</span> = siła związku · ↗ = rosną razem · ↘ = przeciwny kierunek · porównania = średnie w podgrupach</div>
+  <div id="avgLine" style="font-size:10px;color:var(--dim);margin:-4px 0 12px 13px"></div>
   <div id="correlationCards" class="corr-grid">
     <div style="color:var(--dim);font-size:12px;padding:12px">Analizuję dane…</div>
   </div>
@@ -481,7 +498,8 @@ function findCorrelations(data) {
       var1:'Dzień z rowerem', var2:'Dzień bez roweru',
       r:null, arrow:ba>nba?'+':'-',
       desc:'HRV (zmienność rytmu): '+ba.toFixed(0)+' ms vs '+nba.toFixed(0)+' ms',
-      detail:'różnica '+pctDiff(ba,nba)+' ('+ba.toFixed(0)+'/'+nba.toFixed(0)+' ms)'
+      detail:'różnica '+pctDiff(ba,nba)+' ('+ba.toFixed(0)+'/'+nba.toFixed(0)+' ms)',
+      _sortVal: (ba-nba)/nba
     });
   }
 
@@ -496,32 +514,31 @@ function findCorrelations(data) {
       var1:'>12k kroków', var2:'<5k kroków',
       r:null, arrow:diff<0?'↓':'↑',
       desc:'RHR (tętno spoczynkowe): '+ha.toFixed(0)+' vs '+la.toFixed(0)+' uderzeń/min',
-      detail: diff<0?'niższe o '+Math.abs(diff).toFixed(1)+' bpm (niższe = lepiej)':'wyższe o '+diff.toFixed(1)+' bpm (wyższe = gorzej)'
+      detail: diff<0?'niższe o '+Math.abs(diff).toFixed(1)+' bpm (niższe = lepiej)':'wyższe o '+diff.toFixed(1)+' bpm (wyższe = gorzej)',
+      _sortVal: diff
     });
   }
 
-  // averages
-  var stepVals = data.map(function(r){return r.steps;}).filter(function(v){return v!=null&&v>0;});
-  var avgSteps = stepVals.length ? Math.round(stepVals.reduce(function(s,v){return s+v;},0)/stepVals.length) : null;
-  if(avgSteps) out.push({var1:'Średnia kroków', var2:'dziennie', r:0, arrow:'↔', desc:avgSteps.toLocaleString('pl'), detail:'Średnia dzienna liczba kroków w wybranym okresie'});
-  var hrvVals = data.map(function(r){return r.hrv;}).filter(function(v){return v!=null;});
-  if(hrvVals.length>=3) out.push({var1:'Średnia HRV', var2:'', r:0, arrow:'↔', desc:Math.round(hrvVals.reduce(function(s,v){return s+v;},0)/hrvVals.length)+' ms', detail:'Średnia HRV (zmienność rytmu serca) w wybranym okresie'});
-  var rhrVals = data.map(function(r){return r.restingHr;}).filter(function(v){return v!=null;});
-  if(rhrVals.length>=3) out.push({var1:'Średnia RHR', var2:'', r:0, arrow:'↔', desc:Math.round(rhrVals.reduce(function(s,v){return s+v;},0)/rhrVals.length)+' bpm', detail:'Średnie RHR (tętno spoczynkowe) w wybranym okresie'});
-
-  // sort: correlations by |r| desc (r=0 entries = averages go last)
+  // sort: correlations by |r| desc (r=null entries = comparisons sorted by |pctDiff|)
   out.sort(function(a,b){
-    if(a.r!=null&&b.r!=null){
-      if(a.r===0&&b.r===0) return 0;
-      if(a.r===0) return 1;
-      if(b.r===0) return -1;
-      return Math.abs(b.r)-Math.abs(a.r);
-    }
+    if(a.r!=null&&b.r!=null) return Math.abs(b.r)-Math.abs(a.r);
     if(a.r!=null) return -1;
     if(b.r!=null) return 1;
-    return 0;
+    // both are comparisons: sort by how different the groups are
+    var aDiff = a._sortVal||0, bDiff = b._sortVal||0;
+    return Math.abs(bDiff)-Math.abs(aDiff);
   });
   return out;
+}
+
+function calcAverages(data) {
+  var stepVals = data.map(function(r){return r.steps;}).filter(function(v){return v!=null&&v>0;});
+  var avgSteps = stepVals.length ? Math.round(stepVals.reduce(function(s,v){return s+v;},0)/stepVals.length) : null;
+  var hrvVals = data.map(function(r){return r.hrv;}).filter(function(v){return v!=null;});
+  var avgHrv = hrvVals.length>=3 ? Math.round(hrvVals.reduce(function(s,v){return s+v;},0)/hrvVals.length) : null;
+  var rhrVals = data.map(function(r){return r.restingHr;}).filter(function(v){return v!=null;});
+  var avgRhr = rhrVals.length>=3 ? Math.round(rhrVals.reduce(function(s,v){return s+v;},0)/rhrVals.length) : null;
+  return { steps: avgSteps, hrv: avgHrv, rhr: avgRhr };
 }
 
 const chartOpts = {
@@ -784,6 +801,30 @@ function renderActivityChart(data) {
   });
 }
 
+function renderWeightChart(data) {
+  var ctx=document.getElementById('weightChart');
+  var weight=data.map(function(r){return r.weight;});
+  var anyData = weight.some(function(v){return v!=null;});
+  if(!anyData){ctx.style.display='none';return null;}
+  ctx.style.display='block';
+  var labels=data.map(function(r){return r.date.slice(5);});
+  var flat = weight.filter(function(v){return v!=null;});
+  var avgW = flat.length ? flat.reduce(function(s,v){return s+v;},0)/flat.length : null;
+  new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels:labels,
+      datasets:[
+        {label:'Waga (kg)',data:weight,backgroundColor:weight.map(function(v){return v!=null?'rgba(168,85,247,0.5)':'rgba(100,116,139,0.15)';}),borderRadius:2},
+        avgW?{label:'Średnia',data:weight.map(function(){return avgW;}),type:'line',borderColor:'#f59e0b',borderWidth:1.5,borderDash:[4,4],pointRadius:0,fill:false}:null
+      ].filter(Boolean)
+    },
+    options:{...chartOpts,
+      scales:{y:{...chartOpts.scales.y,title:{display:true,text:'kg',color:'#94a3b8',font:{size:10}}}}
+    }
+  });
+}
+
 function abbrTitle(s) {
   if(!s) return '';
   var m = {HRV:'HRV (Heart Rate Variability – zmienność rytmu serca)', RHR:'RHR (Resting Heart Rate – tętno spoczynkowe)', TLR:'TLR (Training Load Ratio – obciążenie treningowe)',
@@ -793,6 +834,16 @@ function abbrTitle(s) {
   var k = Object.keys(m);
   for(var i=0;i<k.length;i++) if(s.indexOf(k[i])>=0) return m[k[i]];
   return s;
+}
+
+function renderAverages(data) {
+  var el = document.getElementById('avgLine');
+  var avgs = calcAverages(data);
+  var parts = [];
+  if(avgs.hrv!=null) parts.push('HRV (zmienność rytmu): średnio '+avgs.hrv+' ms');
+  if(avgs.rhr!=null) parts.push('RHR (tętno spoczynkowe): średnio '+avgs.rhr+' bpm');
+  if(avgs.steps!=null) parts.push('kroki: średnio '+avgs.steps.toLocaleString('pl')+' dziennie');
+  el.innerHTML = parts.length ? '📊 Średnie w wybranym okresie: '+parts.join(' · ') : '';
 }
 
 function renderCorrelations(data) {
@@ -873,7 +924,7 @@ function render(range) {
   const data=processData(allData.days,range);
   if(!data.length) return;
   
-  Object.values(charts).forEach(c=>c.destroy());
+  Object.values(charts).forEach(c=>c&&c.destroy&&c.destroy());
   charts={};
   
   renderStatusCard(data);
@@ -883,6 +934,8 @@ function render(range) {
   charts.sleepChart=renderSleepChart(data);
   charts.loadChart=renderLoadChart(data);
   charts.activityChart=renderActivityChart(data);
+  charts.weightChart=renderWeightChart(data);
+  renderAverages(data);
   renderCorrelations(data);
 }
 
