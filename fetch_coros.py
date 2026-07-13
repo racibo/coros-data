@@ -80,7 +80,39 @@ SHEETS = {
     "sleep": "1078830",
     "vitals": "111422029",
     "body": "1828589559",
+    "weather": "0",
 }
+
+# ── Moon phase (same algorithm as JS) ──────────────
+
+def calc_moon_phase(date_str: str) -> dict:
+    from math import floor, pi, cos
+    y, m, d = int(date_str[:4]), int(date_str[5:7]), int(date_str[8:10])
+    a = (14 - m) // 12
+    yy = y + 4800 - a
+    mm = m + 12 * a - 3
+    jdn = d + (153 * mm + 2) // 5 + 365 * yy + yy // 4 - yy // 100 + yy // 400 - 32045
+    days = jdn - 2451550.26
+    lunations = days / 29.53058867
+    phase_age = lunations - int(lunations)
+    illum = (1 - cos(phase_age * 2 * pi)) / 2
+    if phase_age < 0.03 or phase_age > 0.97:
+        phase_name, label = "new", "Nów"
+    elif phase_age < 0.22:
+        phase_name, label = "waxing_crescent", "Sierp przybywa"
+    elif phase_age < 0.28:
+        phase_name, label = "first_quarter", "I kwadra"
+    elif phase_age < 0.47:
+        phase_name, label = "waxing_gibbous", "Przybywa (garby)"
+    elif phase_age < 0.53:
+        phase_name, label = "full", "Pełnia"
+    elif phase_age < 0.72:
+        phase_name, label = "waning_gibbous", "Ubywa (garby)"
+    elif phase_age < 0.78:
+        phase_name, label = "third_quarter", "III kwadra"
+    else:
+        phase_name, label = "waning_crescent", "Sierp ubywa"
+    return {"moonPhase": phase_name, "moonLabel": label, "moonIllum": round(illum * 100), "moonAge": phase_age}
 
 
 # ── helpers ────────────────────────────────────────────────────────────────
@@ -186,6 +218,10 @@ async def load_google_sheets() -> dict[str, dict]:
         slp_raw = await fetch_sheet(client, SHEETS["sleep"])
         vit_raw = await fetch_sheet(client, SHEETS["vitals"])
         bod_raw = await fetch_sheet(client, SHEETS["body"])
+        try:
+            wth_raw = await fetch_sheet(client, SHEETS["weather"])
+        except Exception:
+            wth_raw = []
 
     # Activity sheet
     act_by_day: dict[str, list[dict]] = {}
@@ -263,14 +299,29 @@ async def load_google_sheets() -> dict[str, dict]:
         if rhr is not None:
             map_[k]["restingHr"] = rhr
 
-    # Body sheet
-    for r in bod_raw:
-        k = ensure(parse_date(get_val(r, "date") or get_val(r, "time")))
-        if not k:
+    # Weather sheet
+    for r in wth_raw:
+        ds = key_date(parse_date(get_val(r, "date") or get_val(r, "data") or get_val(r, "Date")))
+        if not ds:
             continue
-        w = to_n(get_val(r, "weight") or get_val(r, "waga"))
-        if w:
-            map_[k]["weight"] = w
+        if ds not in map_:
+            map_[ds] = {"date": ds}
+        rain_val = (get_val(r, "rain") or get_val(r, "opady") or get_val(r, "deszcz") or "").strip().lower()
+        map_[ds]["rain"] = rain_val
+        rain_mm = to_n(get_val(r, "rain_mm") or get_val(r, "opady_mm") or get_val(r, "precipitation"))
+        if rain_mm is not None:
+            map_[ds]["rainMm"] = rain_mm
+        temp = to_n(get_val(r, "temp") or get_val(r, "temperature") or get_val(r, "temperatura"))
+        if temp is not None:
+            map_[ds]["temp"] = temp
+        weather_note = get_val(r, "weather") or get_val(r, "pogoda") or get_val(r, "conditions") or ""
+        if weather_note:
+            map_[ds]["weatherNote"] = weather_note.strip()
+
+    # Moon phase for every day
+    for ds in list(map_.keys()):
+        mp = calc_moon_phase(ds)
+        map_[ds].update(mp)
 
     return map_
 

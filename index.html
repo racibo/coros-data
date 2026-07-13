@@ -272,7 +272,63 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
 
 <script>
 const SHEET_ID = "1xPJ8xBAPsDv2NfZaKNtzcv6g8hYCVuA40A9iPKN--eo";
-const SHEETS = { activity:"1277227831", sleep:"1078830", vitals:"111422029", body:"1828589559" };
+const SHEETS = { activity:"1277227831", sleep:"1078830", vitals:"111422029", body:"1828589559", weather:"0" };
+
+// ── Moon phase (pure JS, no API) ─────────────────
+function calcMoonPhase(dateStr) {
+  // dateStr: "YYYY-MM-DD"
+  var y = parseInt(dateStr.slice(0,4)), m = parseInt(dateStr.slice(5,7)), d = parseInt(dateStr.slice(8,10));
+  // Julian Day Number
+  var a = Math.floor((14-m)/12);
+  var yy = y+4800-a;
+  var mm = m+12*a-3;
+  var jdn = d + Math.floor((153*mm+2)/5) + 365*yy + Math.floor(yy/4) - Math.floor(yy/100) + Math.floor(yy/400) - 32045;
+  // Days since known new moon: 2000-01-06 18:14 UTC (JDN 2451550.26)
+  var days = jdn - 2451550.26;
+  var lunations = days / 29.53058867;
+  var phaseAge = lunations - Math.floor(lunations); // 0..1
+  var illumination = (1 - Math.cos(phaseAge * 2 * Math.PI)) / 2;
+  var phaseName, phaseLabel;
+  if(phaseAge < 0.03 || phaseAge > 0.97) { phaseName='new'; phaseLabel='Nów'; }
+  else if(phaseAge < 0.22) { phaseName='waxing_crescent'; phaseLabel='Sierp przybywa'; }
+  else if(phaseAge < 0.28) { phaseName='first_quarter'; phaseLabel='I kwadra'; }
+  else if(phaseAge < 0.47) { phaseName='waxing_gibbous'; phaseLabel='Przybywa (garby)'; }
+  else if(phaseAge < 0.53) { phaseName='full'; phaseLabel='Pełnia'; }
+  else if(phaseAge < 0.72) { phaseName='waning_gibbous'; phaseLabel='Ubywa (garby)'; }
+  else if(phaseAge < 0.78) { phaseName='third_quarter'; phaseLabel='III kwadra'; }
+  else { phaseName='waning_crescent'; phaseLabel='Sierp ubywa'; }
+  return { phase: phaseName, label: phaseLabel, illumination: Math.round(illumination*100), age: phaseAge };
+}
+
+// ── Weather sheet ────────────────────────────────
+async function loadWeatherSheet() {
+  var url = "https://docs.google.com/spreadsheets/d/"+SHEET_ID+"/export?format=csv&gid="+SHEETS.weather;
+  try {
+    var resp = await fetch(url);
+    if(!resp.ok) return null;
+    var text = await resp.text();
+    var lines = text.split("\n").filter(function(l){return l.trim();});
+    if(lines.length<2) return null;
+    var headers = lines[0].split(",").map(function(h){return h.trim().replace(/^"+|"+$/g,'');});
+    var map = {};
+    for(var i=1;i<lines.length;i++){
+      var vals = lines[i].split(",").map(function(v){return v.trim().replace(/^"+|"+$/g,'');});
+      var row = {};
+      for(var j=0;j<headers.length;j++) row[headers[j]] = vals[j]||'';
+      var ds = row.date || row.data || row.Date || '';
+      if(ds){
+        // normalize date format
+        var parts = ds.match(/(\d{4})-(\d{2})-(\d{2})/);
+        if(!parts) parts = ds.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+        if(parts){
+          var key = parts[1].length===4 ? parts[0].slice(0,10) : parts[3]+'-'+parts[2]+'-'+parts[1];
+          map[key] = row;
+        }
+      }
+    }
+    return map;
+  } catch(e){ return null; }
+}
 
 const toN = v => v==null||v===""?null:parseFloat(String(v).replace(",","."));
 const pDate = v => {
@@ -396,8 +452,22 @@ function calcStatus(r,prev) {
 
 function processData(raw, range) {
   let data = raw.filter(r=>r.date).sort((a,b)=>a.date.localeCompare(b.date));
-  const fields = ['steps','cal','dist','hrAvg','hrMin','hrMax','deep','rem','light','awake','sleepH','sleepScore','hrv','restingHr','weight','trainingLoad','trainingLoadRatio','ati','cti','tib'];
+  const fields = ['steps','cal','dist','hrAvg','hrMin','hrMax','deep','rem','light','awake','sleepH','sleepScore','hrv','restingHr','weight','trainingLoad','trainingLoadRatio','ati','cti','tib','moonPhase','moonLabel','moonIllum','rain','rainMm','temp','weatherNote'];
   data.forEach(r=>{fields.forEach(f=>{if(!(f in r))r[f]=null;});if(!r.exerciseNames)r.exerciseNames=[];});
+  // moon phase
+  data.forEach(function(r){ var mp = calcMoonPhase(r.date); r.moonPhase = mp.phase; r.moonLabel = mp.label; r.moonIllum = mp.illumination; });
+  // weather merge (set later by loadWeatherSheet)
+  if(allData._weatherMap){
+    data.forEach(function(r){
+      var w = allData._weatherMap[r.date];
+      if(w){
+        r.rain = w.rain||w.opady||w.deszcz||'';
+        r.temp = toN(w.temp||w.temperature||w.temperatura);
+        r.rainMm = toN(w.rain_mm||w.opady_mm||w.precipitation);
+        r.weatherNote = w.weather||w.pogoda||w.conditions||'';
+      }
+    });
+  }
   computeRollingAvgs(data);
   if(range>0&&range<data.length)data=data.slice(-range);
   return data;
@@ -993,6 +1063,25 @@ function renderDayProfiles(data) {
   if(ebikeDays.length<3) ebikeDays = bikeDays.filter(function(r){return r.exerciseNames&&r.exerciseNames.some(function(n){return /e.?bike|e.?rower/.test(n);});});
   addProfile('Dni z e-bikiem', ebikeDays, '🔋');
 
+  // ── Moon phase profiles ──
+  var fullMoon = data.filter(function(r){return r.moonPhase==='full';});
+  var newMoon = data.filter(function(r){return r.moonPhase==='new';});
+  addProfile('Pełnia', fullMoon, '🌕');
+  addProfile('Nów', newMoon, '🌑');
+
+  // ── Rain profiles (if weather data exists) ──
+  var rainyDays = data.filter(function(r){
+    var ra = (r.rain||'').toString().toLowerCase();
+    return ra=='tak'||ra=='yes'||ra=='1'||ra=='true'||r.rainMm>0;
+  });
+  addProfile('Dni deszczowe', rainyDays, '🌧️');
+  var dryDays = data.filter(function(r){
+    if(r.rain===undefined&&r.rainMm===undefined) return false;
+    var ra = (r.rain||'').toString().toLowerCase();
+    return !(ra=='tak'||ra=='yes'||ra=='1'||ra=='true'||r.rainMm>0);
+  });
+  addProfile('Dni bez deszczu', dryDays, '☀️');
+
   var html = cards.filter(function(c){return c!=null;}).join('');
   el.innerHTML = html || '<div style="color:var(--dim);font-size:12px;padding:12px">Za mało danych do analizy (minimum 2 dni w grupie).</div>';
 }
@@ -1010,6 +1099,8 @@ function renderDataTable(data) {
   var rows = data.slice().reverse().map(function(r){
     var d = r.date.slice(5);
     var bike = bikeIcon(r);
+    var moonIcon = r.moonPhase==='full'?'🌕':r.moonPhase==='new'?'🌑':r.moonIllum>50?'🌓':'🌒';
+    var rainIcon = (r.rainMm>0||(r.rain||'').toString().toLowerCase()=='tak')?'🌧️':'';
     return '<tr>' +
       '<td style="padding:2px 6px;white-space:nowrap">' + d + '</td>' +
       '<td style="padding:2px 6px;text-align:right">' + fmt(r.steps) + '</td>' +
@@ -1019,6 +1110,8 @@ function renderDataTable(data) {
       '<td style="padding:2px 6px;text-align:right">' + fmt(r.weight,' kg') + '</td>' +
       '<td style="padding:2px 6px;text-align:right;color:' + (r.trainingLoadRatio!=null&&r.trainingLoadRatio>1.5?'var(--danger)':'var(--text2)') + '">' + fmt(r.trainingLoadRatio) + '</td>' +
       '<td style="padding:2px 6px;text-align:center;white-space:nowrap">' + bike + '</td>' +
+      '<td style="padding:2px 6px;text-align:center" title="' + r.moonLabel + '">' + moonIcon + '</td>' +
+      '<td style="padding:2px 6px;text-align:center">' + rainIcon + '</td>' +
       '</tr>';
   }).join('');
   el.innerHTML = '<table style="width:100%;border-collapse:collapse;line-height:1.6">' +
@@ -1031,6 +1124,8 @@ function renderDataTable(data) {
     '<th style="padding:2px 6px;text-align:right">Waga</th>' +
     '<th style="padding:2px 6px;text-align:right" title="' + abbrTitle('TLR') + '">TLR</th>' +
     '<th style="padding:2px 6px;text-align:center">🚴/🔋</th>' +
+    '<th style="padding:2px 6px;text-align:center" title="Faza Księżyca">🌙</th>' +
+    '<th style="padding:2px 6px;text-align:center">🌧️</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
@@ -1127,7 +1222,7 @@ async function init() {
   }
   allData=raw;
   document.getElementById('loading').style.display='none';
-  
+
   // Show sync timestamp
   const syncEl = document.getElementById('lastSynced');
   if(raw._syncedAt){
@@ -1136,6 +1231,11 @@ async function init() {
   } else {
     syncEl.textContent = 'Odświeżono: ' + new Date().toLocaleString('pl-PL');
   }
+
+  // Load weather (async, non-blocking)
+  loadWeatherSheet().then(function(wm){
+    if(wm){ allData._weatherMap = wm; render(currentRange); }
+  });
   
   render(currentRange);
 }
