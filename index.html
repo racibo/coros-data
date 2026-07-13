@@ -1088,10 +1088,10 @@ function renderDayProfiles(data) {
   addProfile('Dni deszczowe', rainyDays, '🌧️');
   // ── Temperature profiles (if weather data exists) ──
   var tempDays = data.filter(function(r){return r.temp!=null;});
-  if(tempDays.length>=3){
+  if(tempDays.length>=5){
     var tempSorted = tempDays.slice().sort(function(a,b){return (a.temp||0)-(b.temp||0);});
-    addProfile('Najzimniejsze dni', tempSorted.slice(0,3), '🥶');
-    addProfile('Najcieplejsze dni', tempSorted.slice(-3), '🥵');
+    addProfile('Najzimniejsze dni', tempSorted.slice(0,5), '🥶');
+    addProfile('Najcieplejsze dni', tempSorted.slice(-5), '🥵');
   }
 
   var html = cards.filter(function(c){return c!=null;}).join('');
