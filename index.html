@@ -1124,42 +1124,56 @@ function renderDayProfiles(data) {
     addProfile('Najcieplejsze dni', tempSorted.slice(-5), '🥵');
   }
 
-  // ── Summary: which profiles have the best/worst metrics ──
-  var overall = {hrv:0,rhr:0,sleep:0};
+  // ── Summary: which conditions yield the best overall wellness ──
+  var overall = {hrv:0,rhr:0,sleep:0,weight:0};
   (function(){
-    var h = data.map(function(r){return r.hrv;}).filter(function(v){return v!=null;});
-    var r = data.map(function(r){return r.restingHr;}).filter(function(v){return v!=null;});
-    var s = data.map(function(r){return r.sleepScore;}).filter(function(v){return v!=null;});
-    if(h.length) overall.hrv = h.reduce(function(a,b){return a+b;},0)/h.length;
-    if(r.length) overall.rhr = r.reduce(function(a,b){return a+b;},0)/r.length;
-    if(s.length) overall.sleep = s.reduce(function(a,b){return a+b;},0)/s.length;
+    var fields = {hrv:[],rhr:[],sleep:[],weight:[]};
+    data.forEach(function(r){
+      if(r.hrv!=null) fields.hrv.push(r.hrv);
+      if(r.restingHr!=null) fields.rhr.push(r.restingHr);
+      if(r.sleepScore!=null) fields.sleep.push(r.sleepScore);
+      if(r.weight!=null) fields.weight.push(r.weight);
+    });
+    for(var k in fields){
+      var arr = fields[k];
+      if(arr.length) overall[k] = arr.reduce(function(a,b){return a+b;},0)/arr.length;
+    }
   })();
 
   var scored = [];
   groups.forEach(function(g){
-    var h = g.groupDays.map(function(r){return r.hrv;}).filter(function(v){return v!=null;});
-    var r = g.groupDays.map(function(r){return r.restingHr;}).filter(function(v){return v!=null;});
-    var s = g.groupDays.map(function(r){return r.sleepScore;}).filter(function(v){return v!=null;});
-    var avgH = h.length ? h.reduce(function(a,b){return a+b;},0)/h.length : null;
-    var avgR = r.length ? r.reduce(function(a,b){return a+b;},0)/r.length : null;
-    var avgS = s.length ? s.reduce(function(a,b){return a+b;},0)/s.length : null;
-    var score = 0;
-    if(avgH!=null&&overall.hrv) score += avgH > overall.hrv ? 1 : -1;
-    if(avgR!=null&&overall.rhr) score += avgR < overall.rhr ? 1 : -1;
-    if(avgS!=null&&overall.sleep) score += avgS > overall.sleep ? 1 : -1;
-    scored.push({label:g.label,icon:g.icon,score:score,count:g.groupDays.length,hrv:avgH,rhr:avgR,sleep:avgS});
+    var pct = function(field, invert) {
+      var vals = g.groupDays.map(function(r){return r[field];}).filter(function(v){return v!=null;});
+      if(!vals.length||!overall[field]) return null;
+      var avg = vals.reduce(function(a,b){return a+b;},0)/vals.length;
+      var d = (avg - overall[field]) / overall[field] * 100;
+      return invert ? -d : d;
+    };
+    var h = pct('hrv', false);
+    var r = pct('rhr', true);
+    var s = pct('sleep', false);
+    var w = pct('weight', true);
+    var metrics = [h,r,s,w].filter(function(v){return v!=null;});
+    var comp = metrics.length ? metrics.reduce(function(a,b){return a+b;},0)/metrics.length : null;
+    scored.push({label:g.label,icon:g.icon,score:comp,count:g.groupDays.length,pctHrv:h,pctRhr:r,pctSleep:s,pctWeight:w});
   });
-  scored.sort(function(a,b){return b.score-a.score;});
+  scored.sort(function(a,b){return (b.score||-999)-(a.score||-999);});
 
-  var best = scored.filter(function(s){return s.score>0;});
-  var worst = scored.filter(function(s){return s.score<0;}).slice().reverse();
-
-  if(best.length>=2||worst.length>=2){
+  var top = scored.filter(function(s){return s.score!=null&&s.count>=2;}).slice(0,2);
+  if(top.length){
     var sm = '<div class="corr-card" style="background:var(--surface);border-left:3px solid var(--accent)">' +
-      '<div class="corr-vars" style="font-size:12px">📊 Podsumowanie profili</div>' +
+      '<div class="corr-vars" style="font-size:12px">📊 Podsumowanie – co działa najlepiej?</div>' +
       '<div style="font-size:10px;color:var(--dim);line-height:1.6;padding:4px 0">';
-    if(best.length) sm += 'Najlepsze wskaźniki: ' + best.slice(0,4).map(function(s){return s.icon+' '+s.label;}).join(', ') + '. ';
-    if(worst.length) sm += 'Najsłabsze wskaźniki: ' + worst.slice(0,4).map(function(s){return s.icon+' '+s.label;}).join(', ') + '. ';
+    sm += 'Najkorzystniejsze czynniki: ';
+    sm += top.map(function(s){
+      var parts = [];
+      if(s.pctHrv!=null) parts.push('HRV '+(s.pctHrv>0?'+':'')+s.pctHrv.toFixed(0)+'%');
+      if(s.pctRhr!=null) parts.push('RHR '+(s.pctRhr>0?'-':'-')+Math.abs(s.pctRhr).toFixed(0)+'%');
+      if(s.pctSleep!=null) parts.push('sen '+(s.pctSleep>0?'+':'')+s.pctSleep.toFixed(0)+'%');
+      if(s.pctWeight!=null) parts.push('waga '+(s.pctWeight>0?'-':'-')+Math.abs(s.pctWeight).toFixed(0)+'%');
+      return s.icon+' '+s.label+' ('+parts.join(', ')+')';
+    }).join(' oraz ');
+    sm += '. Średnia poprawa wszystkich wskaźników: '+(top.length>1?top[0].score.toFixed(0):'')+'% vs ogólna średnia.';
     sm += '</div></div>';
     cards.push(sm);
   }
