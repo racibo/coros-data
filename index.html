@@ -1065,9 +1065,10 @@ function profileGroup(data, label, groupDays, icon) {
 function renderDayProfiles(data) {
   var el = document.getElementById('dayProfileCards');
   var cards = [];
+  var groups = [];
   function addProfile(label, groupDays, icon) {
     var h = profileGroup(data, label, groupDays, icon);
-    if(h) cards.push(h);
+    if(h){ cards.push(h); groups.push({label, groupDays, icon}); }
   }
 
   // top 5 steps
@@ -1121,6 +1122,46 @@ function renderDayProfiles(data) {
     var tempSorted = tempDays.slice().sort(function(a,b){return (a.temp||0)-(b.temp||0);});
     addProfile('Najzimniejsze dni', tempSorted.slice(0,5), '🥶');
     addProfile('Najcieplejsze dni', tempSorted.slice(-5), '🥵');
+  }
+
+  // ── Summary: which profiles have the best/worst metrics ──
+  var overall = {hrv:0,rhr:0,sleep:0};
+  (function(){
+    var h = data.map(function(r){return r.hrv;}).filter(function(v){return v!=null;});
+    var r = data.map(function(r){return r.restingHr;}).filter(function(v){return v!=null;});
+    var s = data.map(function(r){return r.sleepScore;}).filter(function(v){return v!=null;});
+    if(h.length) overall.hrv = h.reduce(function(a,b){return a+b;},0)/h.length;
+    if(r.length) overall.rhr = r.reduce(function(a,b){return a+b;},0)/r.length;
+    if(s.length) overall.sleep = s.reduce(function(a,b){return a+b;},0)/s.length;
+  })();
+
+  var scored = [];
+  groups.forEach(function(g){
+    var h = g.groupDays.map(function(r){return r.hrv;}).filter(function(v){return v!=null;});
+    var r = g.groupDays.map(function(r){return r.restingHr;}).filter(function(v){return v!=null;});
+    var s = g.groupDays.map(function(r){return r.sleepScore;}).filter(function(v){return v!=null;});
+    var avgH = h.length ? h.reduce(function(a,b){return a+b;},0)/h.length : null;
+    var avgR = r.length ? r.reduce(function(a,b){return a+b;},0)/r.length : null;
+    var avgS = s.length ? s.reduce(function(a,b){return a+b;},0)/s.length : null;
+    var score = 0;
+    if(avgH!=null&&overall.hrv) score += avgH > overall.hrv ? 1 : -1;
+    if(avgR!=null&&overall.rhr) score += avgR < overall.rhr ? 1 : -1;
+    if(avgS!=null&&overall.sleep) score += avgS > overall.sleep ? 1 : -1;
+    scored.push({label:g.label,icon:g.icon,score:score,count:g.groupDays.length,hrv:avgH,rhr:avgR,sleep:avgS});
+  });
+  scored.sort(function(a,b){return b.score-a.score;});
+
+  var best = scored.filter(function(s){return s.score>0;});
+  var worst = scored.filter(function(s){return s.score<0;}).slice().reverse();
+
+  if(best.length>=2||worst.length>=2){
+    var sm = '<div class="corr-card" style="background:var(--surface);border-left:3px solid var(--accent)">' +
+      '<div class="corr-vars" style="font-size:12px">📊 Podsumowanie profili</div>' +
+      '<div style="font-size:10px;color:var(--dim);line-height:1.6;padding:4px 0">';
+    if(best.length) sm += 'Najlepsze wskaźniki: ' + best.slice(0,4).map(function(s){return s.icon+' '+s.label;}).join(', ') + '. ';
+    if(worst.length) sm += 'Najsłabsze wskaźniki: ' + worst.slice(0,4).map(function(s){return s.icon+' '+s.label;}).join(', ') + '. ';
+    sm += '</div></div>';
+    cards.push(sm);
   }
 
   var html = cards.filter(function(c){return c!=null;}).join('');
