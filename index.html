@@ -399,7 +399,7 @@ async function loadJSON() {
 }
 
 async function loadGoogleSheets() {
-  const p = (t,cb)=>{const rows=t.split("\n").slice(1).filter(Boolean).map(l=>{const v=l.split(",").map(x=>x.trim().replace(/^"+|"+$/g,''));const o={};cb.forEach((k,i)=>o[k]=v[i]);return o;});return rows;};
+  const p = (t,fields)=>{const rows=t.split("\n").filter(Boolean);const h=rows[0].split(",").map(x=>x.trim().replace(/^"+|"+$/g,'').toLowerCase());const idx=f=>{for(var j=0;j<h.length;j++){if(h[j].includes(f))return j;}return -1;};const out=[];for(var i=1;i<rows.length;i++){var v=rows[i].split(",").map(x=>x.trim().replace(/^"+|"+$/g,''));var o={};fields.forEach(function(f){var j=idx(f);if(j>=0)o[f]=v[j];});out.push(o);}return out;};
   const fe = async gid => {const r=await fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`);return r.text();};
   const actR = p(await fe(SHEETS.activity),["date","steps","distance","calories","exercise","source"]);
   const slpR = p(await fe(SHEETS.sleep),["date","deep","rem","light","source"]);
