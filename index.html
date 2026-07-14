@@ -697,6 +697,12 @@ const chartOpts = {
            y:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#1e293b'}}}
 };
 
+function makeChart(ctx, config) {
+  var existing = Chart.getChart(ctx);
+  if(existing) existing.destroy();
+  return new Chart(ctx, config);
+}
+
 function renderHrvChart(data) {
   const ctx=document.getElementById('hrvChart');
   const labels=data.map(r=>r.date.slice(5));
@@ -705,7 +711,7 @@ function renderHrvChart(data) {
   const bikes=data.map(r=>r.exerciseNames&&r.exerciseNames.some(n=>/szosa|bik.*ing|cycling|rower|road.*bike|e.?bike|sport.?3|jazda|ride/.test(n))?r.hrv:null);
   const walks=data.map(r=>r.exerciseNames&&r.exerciseNames.some(n=>/hiking|walking|spacer|wędrow/.test(n))?r.hrv:null);
 
-  new Chart(ctx,{
+  makeChart(ctx,{
     type:'bar',
     data:{
       labels,
@@ -757,7 +763,7 @@ function renderRhrChart(data) {
   const avg7=data.map(r=>r._a7rhr);
   const avg30=data.map(r=>r._a30rhr);
 
-  new Chart(ctx,{
+  makeChart(ctx,{
     type:'bar',
     data:{
       labels,
@@ -807,7 +813,7 @@ function renderCombinedHr(data) {
   const normHrv = norm(data.map(r=>r.hrv));
   const normMax = norm(data.map(r=>r.hrMax));
 
-  new Chart(ctx,{
+  makeChart(ctx,{
     type:'line',
     data:{
       labels,
@@ -850,7 +856,7 @@ function renderSleepChart(data) {
   const score=data.map(r=>r.sleepScore);
   const avg7=data.map(r=>r._a7sleepScore);
 
-  new Chart(ctx,{
+  makeChart(ctx,{
     type:'bar',
     data:{
       labels,
@@ -880,7 +886,7 @@ function renderLoadChart(data) {
   const bikes=data.map(r=>r.exerciseNames&&r.exerciseNames.some(n=>/szosa|bik.*ing|cycling|rower|road.*bike|e.?bike|sport.?3|jazda|ride/.test(n))?1.5:null);
   const overreach=Array(labels.length).fill(1.5);
 
-  new Chart(ctx,{
+  makeChart(ctx,{
     type:'line',
     data:{
       labels,
@@ -917,7 +923,7 @@ function renderActivityChart(data) {
   const rhrRange = rhrMax - rhrMin || 1;
   const rhrInv = rhr.map(v=>v!=null? rhrMax - (v - rhrMin) : null);
 
-  new Chart(ctx,{
+  makeChart(ctx,{
     type:'bar',
     data:{
       labels,
@@ -959,7 +965,7 @@ function renderWeightChart(data) {
   var labels=data.map(function(r){return r.date.slice(5);});
   var flat = weight.filter(function(v){return v!=null;});
   var avgW = flat.length ? flat.reduce(function(s,v){return s+v;},0)/flat.length : null;
-  new Chart(ctx,{
+  makeChart(ctx,{
     type:'bar',
     data:{
       labels:labels,
@@ -1298,7 +1304,6 @@ function render(range) {
   }
   if(!data.length) return;
   
-  Object.values(charts).forEach(function(c){try{if(c&&c.destroy)c.destroy();}catch(e){}});
   charts={};
   
   try{renderStatusCard(data);}catch(e){console.error('statusCard',e);}
