@@ -434,38 +434,23 @@ async def main():
             print(msg)
             debug_log.append(msg)
 
-        # Ensure mobile token is available before parallel calls
-        if not await _ensure_mobile_token(auth):
-            dbg("  WARN: cannot acquire mobile token, steps/HR/RHR will be missing")
+        # Only use cached mobile token – never do a full login (would invalidate phone session)
         mobile_base = MOBILE_BASE_URLS.get(auth.region, MOBILE_BASE_URLS["eu"])
-
-        _login_lock = asyncio.Lock()
-        _login_done = False
-
-        async def _mobile_login_full() -> bool:
-            """Full mobile login using env credentials. Only one coroutine logs in at a time."""
-            nonlocal _login_done
-            async with _login_lock:
-                if _login_done:
-                    return True  # already logged in by another coroutine
-                from coros_api import _mobile_login, get_env_credentials
-                creds = get_env_credentials()
-                if not creds:
-                    return False
-                email, password, region = creds
+        has_mobile = auth.mobile_access_token is not None
+        if not has_mobile:
+            # Try refreshing from cached payload without re-entering credentials
+            if auth.mobile_login_payload:
                 try:
-                    dbg("  performing full mobile login…")
-                    token, payload = await _mobile_login(email, password, region)
-                    auth.mobile_access_token = token
-                    auth.mobile_login_payload = payload
-                    _save_auth_cache(auth, AUTH_CACHE_PATH)
-                    _login_done = True
-                    return True
-                except Exception as exc:
-                    dbg(f"    mobile full login failed: {exc}")
-                    return False
+                    from coros_api import _refresh_mobile_token
+                    has_mobile = await _refresh_mobile_token(auth)
+                except Exception:
+                    pass
+        if not has_mobile:
+            dbg("  WARN: no mobile token (phone might not be logged in). Skipping steps/HR/RHR.")
 
-        async def fetch_mobile_dt(dt: int, retry: bool = True) -> list[dict]:
+        async def fetch_mobile_dt(dt: int) -> list[dict]:
+            if not has_mobile:
+                return []
             url = mobile_base + ENDPOINTS["sleep"]
             payload = {
                 "allDeviceSleep": 0,
@@ -482,26 +467,12 @@ async def main():
                     json=payload,
                     headers={"Content-Type": "application/json", "accesstoken": auth.mobile_access_token},
                 )
-                body = None
-                if resp.status_code == 200:
-                    body = resp.json()
-                    if body.get("result") != "0000":
-                        msg = body.get("message", "?")
-                        dbg(f"  mobile dt={dt} error: {msg}")
-                        if retry and "invalid" in msg.lower():
-                            dbg(f"  mobile dt={dt} – token invalid, doing full login…")
-                            if await _mobile_login_full():
-                                return await fetch_mobile_dt(dt, retry=False)
-                            dbg(f"  mobile dt={dt}: full login failed, skipping")
-                        return []
-                elif resp.status_code in (401, 403) and retry:
-                    dbg(f"  mobile dt={dt} status {resp.status_code} – doing full login…")
-                    if await _mobile_login_full():
-                        return await fetch_mobile_dt(dt, retry=False)
-                    dbg(f"  mobile dt={dt}: full login failed, skipping")
-                    return []
-                elif resp.status_code != 200:
+                if resp.status_code != 200:
                     dbg(f"  WARN: mobile dt={dt} status {resp.status_code}")
+                    return []
+                body = resp.json()
+                if body.get("result") != "0000":
+                    dbg(f"  mobile dt={dt} error: {body.get('message','?')}")
                     return []
                 data_node = body.get("data")
                 if data_node is None:
