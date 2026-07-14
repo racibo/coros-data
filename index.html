@@ -465,30 +465,62 @@ function computeRollingAvgs(data) {
   });
 }
 
-function calcStatus(r,prev) {
+function calcStatus(r,prev,data) {
   if(!r) return {label:'Brak danych',color:'#64748b',emoji:'❓',score:0};
   let sc=0,reasons=[];
+  const idx = data?data.indexOf(r):-1;
+  const causes = [];
   if(r.hrv!=null&&r._a7hrv!=null){
-    if(r.hrv>r._a7hrv*1.05){sc+=2;reasons.push(`HRV +${Math.round((r.hrv/r._a7hrv-1)*100)}% vs 7d – regeneracja OK`);}
-    else if(r.hrv<r._a7hrv*0.85){sc-=2;reasons.push(`HRV -${Math.round((1-r.hrv/r._a7hrv)*100)}% vs 7d – możliwe zmęczenie/stres`);}
-    else if(r.hrv<r._a7hrv*0.95){sc-=1;reasons.push(`HRV nieco poniżej średniej`);}
-    else{sc+=1;reasons.push(`HRV stabilne`);}
+    const pct=Math.round((r.hrv/r._a7hrv-1)*100);
+    if(pct>=5){sc+=2;reasons.push(`Regeneracja +${pct}% – poziom gotowości wysoki`);}
+    else if(pct<=-15){sc-=2;reasons.push(`Regeneracja ${pct}% – znaczny spadek`);causes.push('hrv');}
+    else if(pct<=-5){sc-=1;reasons.push(`Regeneracja ${pct}% – lekki spadek`);causes.push('hrv');}
+    else{sc+=1;reasons.push(`Regeneracja stabilna`);}
   }
   if(r.restingHr!=null&&r._a7rhr!=null){
-    const d=r.restingHr-r._a7rhr;
-    if(d<=0){sc+=1;reasons.push(`RHR w normie (${r.restingHr} bpm)`);}
-    else if(d>=3){sc-=2;reasons.push(`RHR podwyższone +${d} bpm vs 7d – niedoregenerowanie`);}
-    else{sc-=1;reasons.push(`RHR lekko podwyższone +${d} bpm`);}
+    const d=Math.round(r.restingHr-r._a7rhr);
+    if(d<=0){sc+=1;reasons.push(`Tętno spoczynkowe w normie (${r.restingHr} bpm)`);}
+    else if(d>=3){sc-=2;reasons.push(`Tętno spoczynkowe podwyższone +${d} bpm – organizm przeciążony`);causes.push('rhr');}
+    else{sc-=1;reasons.push(`Tętno spoczynkowe lekko podwyższone +${d} bpm`);causes.push('rhr');}
   }
   if(r.sleepScore!=null){
     if(r.sleepScore>=75)sc+=1;else if(r.sleepScore<50)sc-=1;
   }
-  if(prev&&prev.exerciseNames){
-    const isBike=prev.exerciseNames.some(n=>/szosa|bik.*ing|cycling|rower|road.*bike|e.?bike|sport.?3|jazda|ride/.test(n));
-    if(isBike&&sc>0)reasons.push('🚴 Po wczorajszym rowerze – regeneracja przebiega prawidłowo');
-  }
   if(r.trainingLoadRatio!=null){
-    if(r.trainingLoadRatio>1.5){sc-=1;reasons.push(`Training Load Ratio=${r.trainingLoadRatio.toFixed(2)} – powyżej progu przetrenowania`);}
+    if(r.trainingLoadRatio>1.5){sc-=1;reasons.push(`Obciążenie treningowe podwyższone (${r.trainingLoadRatio.toFixed(2)}) – ryzyko przetrenowania`);causes.push('tlr');}
+  }
+  // Look back 1-3 days for possible causes of poor recovery
+  if(data&&causes.length){
+    for(let i=1;i<=3;i++){
+      const day=data[idx-i];
+      if(!day) break;
+      // High heart rate 2-3 days ago → possible cause
+      if(day.hrAvg!=null&&(day.hrAvg>120||day.hrMax>150)){
+        reasons.push(`Wysokie tętno ${i} dni temu (śr. ${day.hrAvg}, max ${day.hrMax})`);
+        break;
+      }
+      // High steps
+      if(day.steps!=null&&day.steps>15000){
+        reasons.push(`Duża aktywność ${i} dni temu (${day.steps} kroków)`);
+        break;
+      }
+      // Exercise (bike etc)
+      if(day.exerciseNames&&day.exerciseNames.length){
+        const names=day.exerciseNames.join(', ');
+        reasons.push(`Trening ${i} dni temu: ${names}`);
+        break;
+      }
+      // High TLR
+      if(day.trainingLoadRatio!=null&&day.trainingLoadRatio>1.3){
+        reasons.push(`Wysokie obciążenie treningowe ${i} dni temu`);
+        break;
+      }
+    }
+  }
+  // Bonus: yesterday's bike with good recovery
+  if(prev&&prev.exerciseNames&&sc>0){
+    const isBike=prev.exerciseNames.some(n=>/szosa|bik.*ing|cycling|rower|road.*bike|e.?bike|sport.?3|jazda|ride/.test(n));
+    if(isBike)reasons.push('🚴 Po wczorajszym rowerze – powrót do normy');
   }
   if(sc>=2)return{label:'Wypoczęty',color:'#10b981',emoji:'💪',score:sc,reasons};
   if(sc>=0)return{label:'Lekko zmęczony',color:'#eab308',emoji:'😐',score:sc,reasons};
@@ -1240,7 +1272,7 @@ function renderStatusCard(data) {
   const today=data[data.length-1];
   const yesterday=data.length>1?data[data.length-2]:null;
   const refDay = (today&&today.sleepScore!=null)?today:(yesterday||today);
-  const status = calcStatus(refDay,yesterday);
+  const status = calcStatus(refDay,yesterday,data);
   
   document.getElementById('statusVerdict').innerHTML = `${status.emoji} ${status.label}`;
   card.style.background = status.color;
@@ -1248,23 +1280,28 @@ function renderStatusCard(data) {
   
   const mEl=document.getElementById('statusMetrics');
   const parts=[];
-  if(refDay.hrv!=null){
-    const cls=refDay._hrvDevPct>0.05?'good':refDay._hrvDevPct<-0.05?'bad':'neutral';
-    parts.push(`<div><span title="${abbrTitle('HRV')}">HRV (zmienność rytmu)</span> <span class="num ${cls}">${refDay.hrv} <span title="${abbrTitle('ms')}">ms</span></span>${refDay._a7hrv?` (śr.7d: ${refDay._a7hrv.toFixed(0)})`:''}</div>`);
+  
+  if(refDay.hrv!=null&&refDay._a7hrv!=null){
+    const pct=Math.round((refDay.hrv/refDay._a7hrv-1)*100);
+    const sign=pct>0?'+':'';
+    const cls=pct>=5?'good':pct<=-5?'bad':'neutral';
+    parts.push(`<div><span title="HRV (Heart Rate Variability – zmienność rytmu serca) – wyższe = lepiej">Regeneracja</span> <span class="num ${cls}">${sign}${pct}%</span> <span style="font-size:10px;color:var(--dim)">vs średniej</span></div>`);
   }
-  if(refDay.restingHr!=null){
-    const d=refDay._rhrDevAbs;
-    const cls=d!=null&&d<=0?'good':d!=null&&d>=3?'bad':'neutral';
-    parts.push(`<div><span title="${abbrTitle('RHR')}">RHR (tętno spoczynkowe)</span> <span class="num ${cls}">${refDay.restingHr} <span title="${abbrTitle('bpm')}">bpm</span></span>${refDay._a7rhr?` (śr.7d: ${refDay._a7rhr.toFixed(0)})`:''}</div>`);
+  if(refDay.restingHr!=null&&refDay._a7rhr!=null){
+    const d=Math.round(refDay.restingHr-refDay._a7rhr);
+    const sign=d>0?'+':'';
+    const cls=d<=0?'good':d>=3?'bad':'neutral';
+    parts.push(`<div><span title="RHR (Resting Heart Rate – tętno spoczynkowe) – niższe = lepiej">Tętno spoczynkowe</span> <span class="num ${cls}">${sign}${d} bpm</span> <span style="font-size:10px;color:var(--dim)">vs średniej</span></div>`);
   }
   if(refDay.sleepScore!=null){
-    parts.push(`<div><span title="${abbrTitle('Sleep Score')}">Sen (jakość snu)</span> <span class="num">${refDay.sleepScore} pkt</span></div>`);
+    const cls=refDay.sleepScore>=75?'good':refDay.sleepScore<50?'bad':'neutral';
+    parts.push(`<div><span title="Sleep Score – jakość snu (0-100) – wyższy = lepiej">Sen</span> <span class="num ${cls}">${refDay.sleepScore} pkt</span></div>`);
   }
   if(refDay.trainingLoadRatio!=null){
     var tlr=refDay.trainingLoadRatio;
-    var tlrLabel = tlr>1.5?'ryzyko przetrenowania':tlr>1.2?'intensywny rozwój':tlr>0.8?'równowaga':tlr>0.5?'odciążenie':'głęboka regeneracja';
-    var tlrCls = tlr>1.5?'bad':tlr>0.8?'good':'neutral';
-    parts.push(`<div><span title="${abbrTitle('TLR')}">TLR (obciążenie treningowe)</span> <span class="num ${tlrCls}">${tlr.toFixed(2)}</span> <span style="font-size:10px;color:var(--dim)">– ${tlrLabel}</span></div>`);
+    var label = tlr>1.5?'ryzyko przetrenowania':tlr>1.2?'intensywny rozwój':tlr>0.8?'równowaga':tlr>0.5?'odciążenie':'głęboka regeneracja';
+    var cls = tlr>1.5?'bad':tlr>0.8?'good':'neutral';
+    parts.push(`<div><span title="TLR (Training Load Ratio – obciążenie treningowe) – &lt;1 = regeneracja, &gt;1.5 = ryzyko">Obciążenie treningowe</span> <span class="num ${cls}">${tlr.toFixed(2)}</span> <span style="font-size:10px;color:var(--dim)">– ${label}</span></div>`);
   }
   mEl.innerHTML=parts.join('');
   
