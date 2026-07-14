@@ -95,11 +95,11 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   <div class="header-right">
     <select id="rangeSelect">
       <option value="7">7 dni</option>
-      <option value="14">14 dni</option>
+      <option value="14" selected>14 dni</option>
       <option value="30">30 dni</option>
       <option value="60">60 dni</option>
       <option value="90">90 dni</option>
-      <option value="0" selected>Całość</option>
+      <option value="0">Całość</option>
     </select>
     <button class="btn" onclick="init()">⟳</button>
     <button class="btn" onclick="refreshSheets()" title="Pobierz świeże dane z Arkuszy Google">Odśwież</button>
@@ -1282,7 +1282,7 @@ function toggle(el) {
   el.innerHTML=body.classList.contains('open')?'❓ Schowaj wyjaśnienie ↑':'❓ Czym jest i co oznacza ↓';
 }
 
-let currentRange=0;
+let currentRange=14;
 
 function setupRangeSelect() {
   const sel=document.getElementById('rangeSelect');

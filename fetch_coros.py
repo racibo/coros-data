@@ -345,6 +345,10 @@ async def load_google_sheets() -> dict[str, dict]:
             pass
 
     # Body sheet (weight)
+    print(f"  body sheet rows: {len(bod_raw)}")
+    if bod_raw:
+        print(f"  body headers: {list(bod_raw[0].keys())}")
+        print(f"  body sample: {bod_raw[0]}")
     for r in bod_raw:
         k = ensure(parse_date(get_val(r, "date") or get_val(r, "time")))
         if not k:
@@ -570,6 +574,9 @@ async def main():
         )
         activities, total = act_result
         print(f"  dayList: {len(raw_days)}d, sleep: {len(sleep_recs)}d, hrv: {len(hrv_recs)}d, activities: {total}")
+        if raw_days:
+            dbg(f"  raw_days[0] keys ({len(raw_days[0])}): {sorted(raw_days[0].keys())}")
+            dbg(f"  raw_days[0] bodyWeight={raw_days[0].get('bodyWeight')}, weight={raw_days[0].get('weight')}, bodyWeightKg={raw_days[0].get('bodyWeightKg')}")
 
         # Merge Coros data into Google Sheets map
         for item in raw_days:
@@ -593,6 +600,12 @@ async def main():
                 v = item.get(k)
                 if v is not None:
                     entry[k] = v
+            # Body weight (if available from Coros API)
+            for wk in ("bodyWeight", "weight", "bodyWeightKg"):
+                v = item.get(wk)
+                if v is not None:
+                    entry["weight"] = v
+                    break
 
         # Merge mobile daily data (steps, cals, HR, RHR)
         for ds, m in mobile_by_day.items():
