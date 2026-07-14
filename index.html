@@ -93,7 +93,7 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
 <header>
   <div class="logo">❤️ <span>zdrowysen</span><small>analiza regeneracji i gotowości</small></div>
   <div class="header-right">
-    <select id="rangeSelect" onchange="changeRange()">
+    <select id="rangeSelect">
       <option value="7">7 dni</option>
       <option value="14">14 dni</option>
       <option value="30">30 dni</option>
@@ -1278,30 +1278,41 @@ function toggle(el) {
 
 let currentRange=0;
 
-function changeRange() {
-  currentRange=parseInt(document.getElementById('rangeSelect').value)||0;
-  render(currentRange);
+function setupRangeSelect() {
+  const sel=document.getElementById('rangeSelect');
+  if(!sel) return;
+  sel.addEventListener('change',function(){
+    currentRange=Number(sel.value)||0;
+    render(currentRange);
+  });
 }
 
 function render(range) {
-  const data=processData(allData.days,range);
+  if(!allData||!allData.days) return;
+  let data;
+  try{
+    data=processData(allData.days,range);
+  }catch(e){
+    console.error('processData error',e);
+    return;
+  }
   if(!data.length) return;
   
-  Object.values(charts).forEach(c=>c&&c.destroy&&c.destroy());
+  Object.values(charts).forEach(function(c){try{if(c&&c.destroy)c.destroy();}catch(e){}});
   charts={};
   
-  renderStatusCard(data);
-  charts.hrvChart=renderHrvChart(data);
-  charts.rhrChart=renderRhrChart(data);
-  charts.combinedHr=renderCombinedHr(data);
-  charts.sleepChart=renderSleepChart(data);
-  charts.loadChart=renderLoadChart(data);
-  charts.activityChart=renderActivityChart(data);
-  charts.weightChart=renderWeightChart(data);
-  renderAverages(data);
-  renderCorrelations(data);
-  renderDayProfiles(data);
-  renderDataTable(data);
+  try{renderStatusCard(data);}catch(e){console.error('statusCard',e);}
+  try{charts.hrvChart=renderHrvChart(data);}catch(e){console.error('hrvChart',e);}
+  try{charts.rhrChart=renderRhrChart(data);}catch(e){console.error('rhrChart',e);}
+  try{charts.combinedHr=renderCombinedHr(data);}catch(e){console.error('combinedHr',e);}
+  try{charts.sleepChart=renderSleepChart(data);}catch(e){console.error('sleepChart',e);}
+  try{charts.loadChart=renderLoadChart(data);}catch(e){console.error('loadChart',e);}
+  try{charts.activityChart=renderActivityChart(data);}catch(e){console.error('activityChart',e);}
+  try{charts.weightChart=renderWeightChart(data);}catch(e){console.error('weightChart',e);}
+  try{renderAverages(data);}catch(e){console.error('averages',e);}
+  try{renderCorrelations(data);}catch(e){console.error('correlations',e);}
+  try{renderDayProfiles(data);}catch(e){console.error('dayProfiles',e);}
+  try{renderDataTable(data);}catch(e){console.error('dataTable',e);}
 }
 
 async function init() {
@@ -1353,6 +1364,7 @@ async function init() {
     if(wm){ allData._weatherMap = wm; render(currentRange); }
   });
   
+  setupRangeSelect();
   render(currentRange);
 }
 
