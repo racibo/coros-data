@@ -1057,20 +1057,20 @@ function renderWeightChart(data) {
               var prev=ctx.dataIndex>0?data[ctx.dataIndex-1].weight:null;
               var chg=prev!=null&&r.weight!=null?Math.round((r.weight-prev)*10)/10:null;
               var sym=chg!=null?(chg>0?' ↑':(chg<0?' ↓':' →')):'';
-              var col=chg!=null?(chg>0?'#ef4444':(chg<0?'#10b981':'#94a3b8')):'#fff';
-              return ds+': '+r.weight.toFixed(1)+' kg'+(chg!=null?' <span style="color:'+col+'">('+(chg>0?'+':'')+chg.toFixed(1)+' kg'+sym+')</span>':'');
+              var txt=ds+': '+r.weight.toFixed(1)+' kg';
+              if(chg!=null) txt+=' ('+(chg>0?'+':'')+chg.toFixed(1)+' kg'+sym+')';
+              return txt;
             }
             if(ds==='Odch. BMI od 22'){
               if(ctx.raw==null)return '';
-              var col=ctx.raw>0?'#ef4444':'#10b981';
-              var txt='BMI odchylenie od 22: <span style="color:'+col+'">'+(ctx.raw>0?'+':'')+ctx.raw.toFixed(1)+'</span>';
+              var txt='Odchylenie BMI od 22: '+(ctx.raw>0?'+':'')+ctx.raw.toFixed(1);
               if(r._idealWeight!=null&&r.weight!=null){
                 var wd=Math.round((r.weight-r._idealWeight)*10)/10;
                 txt+=' ('+(wd>0?'+':'')+wd.toFixed(1)+' kg od wagi idealnej)';
               }
               return txt;
             }
-            if(ctx.raw!=null) return ds+': '+ctx.raw+' kg';
+            if(ctx.raw!=null) return ds+': '+ctx.raw.toFixed(1)+' kg';
             return '';
           },
           afterBody:function(ctx){
@@ -1081,8 +1081,11 @@ function renderWeightChart(data) {
             if(r._a30weight!=null) parts.push('Średnia 30d: '+r._a30weight.toFixed(1)+' kg');
             if(r._a90weight!=null) parts.push('Średnia 90d: '+r._a90weight.toFixed(1)+' kg');
             if(r._bmi!=null){
-              var bc=r._bmi>25?'#ef4444':(r._bmi<18.5?'#f59e0b':'#10b981');
-              parts.push('BMI: <span style="color:'+bc+'">'+r._bmi.toFixed(1)+'</span>');
+              var bmiTxt='BMI: '+r._bmi.toFixed(1);
+              if(r._bmi>25) bmiTxt+=' (nadwaga)';
+              else if(r._bmi<18.5) bmiTxt+=' (niedowaga)';
+              else bmiTxt+=' (norma)';
+              parts.push(bmiTxt);
             }
             return parts.join(' · ');
           }
