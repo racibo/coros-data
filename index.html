@@ -227,12 +227,15 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   </div>
   <div class="section-sub">Waga (kg) – im stabilniejsza (<span class="good">małe wahania</span>), tym lepiej · wzrost wagi = <span class="bad">większe obciążenie</span> serca · im <span class="good">niższa</span>, tym lepiej (w granicach normy)</div>
   <div class="chart-box"><canvas id="weightChart"></canvas></div>
-  <div class="explain" onclick="toggle(this)">❓ Dlaczego waga ma znaczenie &darr;</div>
+  <div class="explain" onclick="toggle(this)">❓ Jak czytać wykres wagi &darr;</div>
   <div class="explain-body">
-  Waga ciała wpływa na układ krążenia:<br>
-  • Wyższa waga → serce musi pompować więcej krwi → wyższe RHR, niższe HRV.<br>
-  • Nawet niewielkie wahania wagi (1-2 kg) mogą wpływać na regenerację.<br>
-  • Brak danych = waga nie była mierzona w tym okresie.
+  <strong>Waga</strong> – masa ciała w kg. Niższa waga = mniejsze obciążenie serca, ale w granicach zdrowego BMI.<br>
+  • <strong>Niebieska linia</strong> – waga dzienna. Kropki = dni z pomiarem, brak kropki = brak danych.<br>
+  • <strong>Linie przerywane</strong> – średnie kroczące: 7d (pomarańcz), 14d (zielona), 30d (fiolet), 90d (różowa). Im dłuższy okres, tym jaśniejsza i rzadsza kreska.<br>
+  • <strong>Czerwono-zielona linia (prawa oś)</strong> – odchylenie BMI od idealnego (22). <span style="color:#10b981">Zielony</span> = BMI &lt; 22, <span style="color:#ef4444">czerwony</span> = BMI &gt; 22 (nadwaga).<br>
+  • <strong>BMI</strong> (Body Mass Index) = waga (kg) / wzrost² (m). Przy wzroście 177 cm: BMI 18.5–24.9 = norma, &lt;18.5 = niedowaga, &ge;25 = nadwaga. Idealne BMI ≈ 22 (ok. 68.9 kg).<br>
+  • <strong>Co jest dobre?</strong> Stabilna waga w normie BMI. Nagły wzrost &rarr; większe obciążenie serca (wyższe RHR, niższe HRV). Spadek wagi (jeśli nadwaga) &rarr; korzystny dla regeneracji.<br>
+  • <strong>Brak danych</strong> = waga nie była mierzona. Wagę dodajesz przez <strong>HealthExport</strong> &rarr; Google Sheets.
   </div>
 </div>
 
@@ -1032,16 +1035,16 @@ function renderWeightChart(data) {
       labels:labels,
       datasets:[
         {label:'Waga (kg)',data:w,borderColor:'#60a5fa',backgroundColor:'rgba(96,165,250,0.08)',fill:true,pointRadius:4,pointBackgroundColor:w.map(function(v){return v==null?'transparent':'#60a5fa';}),borderWidth:2,spanGaps:true,tension:0.1,yAxisID:'y'},
-        {label:'MA7',data:ma7,borderColor:'#f59e0b',borderWidth:1.5,pointRadius:0,spanGaps:true,tension:0.3,yAxisID:'y'},
-        {label:'MA14',data:ma14,borderColor:'#10b981',borderWidth:1,pointRadius:0,spanGaps:true,tension:0.3,borderDash:[3,2],yAxisID:'y'},
-        {label:'MA30',data:ma30,borderColor:'#8b5cf6',borderWidth:1,pointRadius:0,spanGaps:true,tension:0.3,borderDash:[4,3],yAxisID:'y'},
-        {label:'MA90',data:ma90,borderColor:'#ec4899',borderWidth:1,pointRadius:0,spanGaps:true,tension:0.3,borderDash:[6,4],yAxisID:'y'},
-        {label:'BMI odch. od 22',data:bmiDev,borderColor:'#ef4444',backgroundColor:'transparent',borderWidth:1,pointRadius:3,pointBackgroundColor:bmiDev.map(function(v){return v==null?'transparent':v>0?'#ef4444':'#10b981';}),spanGaps:true,tension:0.1,yAxisID:'y1'}
+        {label:'Średnia 7d',data:ma7,borderColor:'rgba(245,158,11,0.9)',borderWidth:1.5,pointRadius:0,spanGaps:true,tension:0.3,borderDash:[3,3],yAxisID:'y'},
+        {label:'Średnia 14d',data:ma14,borderColor:'rgba(16,185,129,0.7)',borderWidth:1.2,pointRadius:0,spanGaps:true,tension:0.3,borderDash:[4,4],yAxisID:'y'},
+        {label:'Średnia 30d',data:ma30,borderColor:'rgba(139,92,246,0.55)',borderWidth:1,pointRadius:0,spanGaps:true,tension:0.3,borderDash:[5,5],yAxisID:'y'},
+        {label:'Średnia 90d',data:ma90,borderColor:'rgba(236,72,153,0.4)',borderWidth:0.8,pointRadius:0,spanGaps:true,tension:0.3,borderDash:[6,6],yAxisID:'y'},
+        {label:'Odch. BMI od 22',data:bmiDev,borderColor:'#ef4444',backgroundColor:'transparent',borderWidth:1,pointRadius:3,pointBackgroundColor:bmiDev.map(function(v){return v==null?'transparent':v>0?'#ef4444':'#10b981';}),spanGaps:true,tension:0.1,yAxisID:'y1'}
       ]
     },
     options:{...chartOpts,
       scales:{y:{...chartOpts.scales.y,position:'left',title:{display:true,text:'kg',color:'#94a3b8',font:{size:10}},min:yMin,max:yMax},
-        y1:{position:'right',title:{display:true,text:'BMI odch. od 22',color:'#94a3b8',font:{size:10}},grid:{drawOnChartArea:false},min:-bdAbs-1,max:bdAbs+1}},
+        y1:{position:'right',title:{display:true,text:'Odch. BMI od 22',color:'#94a3b8',font:{size:10}},grid:{drawOnChartArea:false},min:-bdAbs-1,max:bdAbs+1}},
       interaction:{mode:'index',intersect:false},
       plugins:{...chartOpts.plugins,
         tooltip:{callbacks:{
@@ -1055,15 +1058,15 @@ function renderWeightChart(data) {
               var chg=prev!=null&&r.weight!=null?Math.round((r.weight-prev)*10)/10:null;
               var sym=chg!=null?(chg>0?' ↑':(chg<0?' ↓':' →')):'';
               var col=chg!=null?(chg>0?'#ef4444':(chg<0?'#10b981':'#94a3b8')):'#fff';
-              return ds+': '+r.weight+' kg'+(chg!=null?' <span style="color:'+col+'">('+(chg>0?'+':'')+chg+' kg'+sym+')</span>':'');
+              return ds+': '+r.weight.toFixed(1)+' kg'+(chg!=null?' <span style="color:'+col+'">('+(chg>0?'+':'')+chg.toFixed(1)+' kg'+sym+')</span>':'');
             }
-            if(ds==='BMI odch. od 22'){
+            if(ds==='Odch. BMI od 22'){
               if(ctx.raw==null)return '';
               var col=ctx.raw>0?'#ef4444':'#10b981';
-              var txt='BMI odch. od 22: <span style="color:'+col+'">'+(ctx.raw>0?'+':'')+ctx.raw+'</span>';
+              var txt='BMI odchylenie od 22: <span style="color:'+col+'">'+(ctx.raw>0?'+':'')+ctx.raw.toFixed(1)+'</span>';
               if(r._idealWeight!=null&&r.weight!=null){
                 var wd=Math.round((r.weight-r._idealWeight)*10)/10;
-                txt+=' ('+(wd>0?'+':'')+wd+' kg od wzorca)';
+                txt+=' ('+(wd>0?'+':'')+wd.toFixed(1)+' kg od wagi idealnej)';
               }
               return txt;
             }
@@ -1073,13 +1076,13 @@ function renderWeightChart(data) {
           afterBody:function(ctx){
             var r=data[ctx[0].dataIndex];
             var parts=[];
-            if(r._a7weight!=null) parts.push('MA7: '+r._a7weight+' kg');
-            if(r._a14weight!=null) parts.push('MA14: '+r._a14weight+' kg');
-            if(r._a30weight!=null) parts.push('MA30: '+r._a30weight+' kg');
-            if(r._a90weight!=null) parts.push('MA90: '+r._a90weight+' kg');
+            if(r._a7weight!=null) parts.push('Średnia 7d: '+r._a7weight.toFixed(1)+' kg');
+            if(r._a14weight!=null) parts.push('Średnia 14d: '+r._a14weight.toFixed(1)+' kg');
+            if(r._a30weight!=null) parts.push('Średnia 30d: '+r._a30weight.toFixed(1)+' kg');
+            if(r._a90weight!=null) parts.push('Średnia 90d: '+r._a90weight.toFixed(1)+' kg');
             if(r._bmi!=null){
               var bc=r._bmi>25?'#ef4444':(r._bmi<18.5?'#f59e0b':'#10b981');
-              parts.push('BMI: <span style="color:'+bc+'">'+r._bmi+'</span>');
+              parts.push('BMI: <span style="color:'+bc+'">'+r._bmi.toFixed(1)+'</span>');
             }
             return parts.join(' · ');
           }
