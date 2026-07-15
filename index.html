@@ -101,8 +101,7 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
       <option value="90">90 dni</option>
       <option value="0">Całość</option>
     </select>
-    <button class="btn" onclick="init()">⟳</button>
-    <button class="btn" onclick="refreshSheets()" title="Pobierz świeże dane z Arkuszy Google">Odśwież</button>
+    <button class="btn" onclick="init()" title="Odśwież wszystkie dane">⟳</button>
     <span id="lastSynced" style="font-family:var(--mono);font-size:10px;color:var(--dim)"></span>
   </div>
 </header>
@@ -1007,14 +1006,22 @@ function renderWeightChart(data) {
   var anyData = vals.some(function(v){return v!=null;});
   if(!anyData){ctx.style.display='none';return null;}
   ctx.style.display='block';
+  // rolling avg of _pctWeight (7-window)
+  var ma7 = data.map(function(r,i){
+    if(r._pctWeight==null) return null;
+    var sum=0,cnt=0;
+    for(var j=Math.max(0,i-6);j<=i;j++){if(data[j]._pctWeight!=null){sum+=data[j]._pctWeight;cnt++;}}
+    return cnt>0?Math.round(sum/cnt*10)/10:null;
+  });
   var labels=data.map(function(r){return r.date.slice(5);});
   var axis=symAxis(data,'_pctWeight',5);
   makeChart(ctx,{
-    type:'bar',
+    type:'line',
     data:{
       labels:labels,
       datasets:[
-        {label:'Waga (% odchylenia) +%=spadek',data:vals,backgroundColor:vals.map(function(v){return v==null?'rgba(100,116,139,0.12)':v>0?'rgba(16,185,129,0.55)':'rgba(239,68,68,0.5)';}),borderRadius:2}
+        {label:'Waga dzienna',data:vals,borderColor:'#60a5fa',backgroundColor:'rgba(96,165,250,0.15)',fill:true,pointRadius:3,pointBackgroundColor:vals.map(function(v){return v==null?'transparent':v>0?'#10b981':'#ef4444';}),borderWidth:1.5,spanGaps:true,tension:0.1},
+        {label:'Śr.krocz. 7d',data:ma7,borderColor:'#f59e0b',backgroundColor:'transparent',borderWidth:2,pointRadius:0,spanGaps:true,tension:0.3,borderDash:[4,3]}
       ]
     },
     options:{...chartOpts,
@@ -1022,10 +1029,12 @@ function renderWeightChart(data) {
       plugins:{...chartOpts.plugins,
         tooltip:{callbacks:{
           label:function(ctx){
-            if(ctx.raw==null)return'';
+            if(ctx.datasetIndex===0 && ctx.raw==null)return'';
             var r=data[ctx.dataIndex];
-            var t='Waga: '+r.weight+' kg';
+            if(ctx.datasetIndex===1) return 'MA7: '+(ctx.raw>0?'+':'')+ctx.raw+'%';
+            var t='Waga: '+(r.weight!=null?r.weight+' kg':'—');
             if(r._bmi)t+=' | BMI: '+r._bmi;
+            if(ctx.raw!=null) t+=' ('+(ctx.raw>0?'+':'')+ctx.raw+'%)';
             return t;
           }
         }}
@@ -1411,41 +1420,29 @@ async function init() {
   allData = raw;
   document.getElementById('loading').style.display='none';
 
-  const syncEl = document.getElementById('lastSynced');
-  syncEl.textContent = 'Odświeżono: ' + new Date().toLocaleString('pl-PL');
+  var syncInfo = '';
+  if(allData._syncedAt){
+    var d = new Date(allData._syncedAt);
+    if(!isNaN(d)) syncInfo += 'Coros: ' + d.toLocaleString('pl-PL');
+  }
+  // latest weight date (HealthExport)
+  var allDays = allData.days || [];
+  var lastWeight = null;
+  for(var i=allDays.length-1;i>=0;i--){if(allDays[i].weight!=null){lastWeight=allDays[i].date;break;}}
+  if(lastWeight){
+    var parts=lastWeight.split('-');
+    var dw = new Date(parseInt(parts[0]),parseInt(parts[1])-1,parseInt(parts[2]));
+    if(syncInfo) syncInfo += ' · ';
+    syncInfo += 'Waga: ' + dw.toLocaleDateString('pl-PL');
+  }
+  // Google Sheets refresh time
+  var now = new Date();
+  if(syncInfo) syncInfo += ' · ';
+  syncInfo += 'Arkusz: ' + now.toLocaleString('pl-PL');
+  document.getElementById('lastSynced').textContent = syncInfo;
 
   if(!_selectSetup){ setupRangeSelect(); _selectSetup = true; }
   render(currentRange);
-}
-
-async function refreshSheets() {
-  document.getElementById('loading').style.display='block';
-  try {
-    var fresh = await loadGoogleSheetsJSONP();
-    if(fresh && fresh.days && fresh.days.length){
-      if(allData && allData.days){
-        var merged = {};
-        allData.days.forEach(function(d){ merged[d.date] = d; });
-        fresh.days.forEach(function(d){
-          if(merged[d.date]){
-            Object.keys(d).forEach(function(k){ if(k!=='date') merged[d.date][k] = d[k]; });
-          } else {
-            merged[d.date] = d;
-          }
-        });
-        allData.days = Object.values(merged).sort(function(a,b){return a.date.localeCompare(b.date);});
-      } else {
-        allData = fresh;
-      }
-      document.getElementById('lastSynced').textContent = 'Odświeżono: ' + new Date().toLocaleString('pl-PL');
-      render(currentRange);
-      document.getElementById('loading').style.display='none';
-    } else {
-      document.getElementById('loading').innerHTML='❌ Arkusz nie odpowiada.';
-    }
-  } catch(e){
-    document.getElementById('loading').innerHTML='❌ Błąd pobierania arkusza.';
-  }
 }
 
 init();
