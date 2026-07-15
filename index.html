@@ -345,7 +345,12 @@ async function loadJSON(noCache) {
 function gvizJSONP(gid) {
   return new Promise(function(resolve, reject) {
     var url = "https://docs.google.com/spreadsheets/d/"+SHEET_ID+"/gviz/tq?tqx=out:json&gid="+gid+"&_="+Date.now();
+    var tid = setTimeout(function(){
+      delete window._gvizCB;
+      resolve(null); // timeout → skip sheet
+    }, 5000);
     window._gvizCB = function(data) {
+      clearTimeout(tid);
       delete window._gvizCB;
       resolve(data);
     };
@@ -357,13 +362,13 @@ function gvizJSONP(gid) {
     };
     var s = document.createElement('script');
     s.src = url;
-    s.onerror = function(){ delete window._gvizCB; reject(new Error('gviz load failed')); };
+    s.onerror = function(){ clearTimeout(tid); delete window._gvizCB; reject(new Error('gviz load failed')); };
     document.head.appendChild(s);
   });
 }
 function gvizToRows(gid, fields) {
   return gvizJSONP(gid).then(function(data){
-    if(!data.table||!data.table.cols||!data.table.rows) return [];
+    if(!data||!data.table||!data.table.cols||!data.table.rows) return [];
     var cols = data.table.cols;
     var idx = function(f) {
       for(var j=0;j<cols.length;j++){
@@ -385,12 +390,11 @@ function gvizToRows(gid, fields) {
   });
 }
 async function loadGoogleSheetsJSONP() {
-  const [actR, slpR, vitR, bodR] = await Promise.all([
-    gvizToRows(SHEETS.activity,["date","steps","distance","calories","exercise","source"]),
-    gvizToRows(SHEETS.sleep,["date","deep","rem","light","source"]),
-    gvizToRows(SHEETS.vitals,["date","min","max","avg","hrv","rhr","source"]),
-    gvizToRows(SHEETS.body,["date","weight"])
-  ]);
+  // Sequential → each call sets its own setResponse handler, no race
+  const actR = await gvizToRows(SHEETS.activity,["date","steps","distance","calories","exercise","source"]);
+  const slpR = await gvizToRows(SHEETS.sleep,["date","deep","rem","light","source"]);
+  const vitR = await gvizToRows(SHEETS.vitals,["date","min","max","avg","hrv","rhr","source"]);
+  const bodR = await gvizToRows(SHEETS.body,["date","weight"]);
   const map={};
   const ensure=k=>{if(!map[k])map[k]={date:k};return k;};
   actR.forEach(r=>{
