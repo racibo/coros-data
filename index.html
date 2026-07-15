@@ -990,18 +990,28 @@ function renderActivityChart(data) {
         y:{...chartOpts.scales.y,title:{display:true,text:'kroki (% odchylenia)',color:'#94a3b8',font:{size:10}},min:axis.min,max:axis.max},
         y1:{position:'right',title:{display:true,text:'RHR (% odchylenia)',color:'#94a3b8',font:{size:10}},grid:{display:false},min:symAxis(data,'_pctRhr',15).min,max:symAxis(data,'_pctRhr',15).max}
       },
+      interaction:{mode:'index',intersect:false},
       plugins:{...chartOpts.plugins,
         tooltip:{callbacks:{
-          label:ctx=>{
-            if(ctx.datasetIndex===1&&ctx.raw!=null){
-              const r=data[ctx.dataIndex];
-              return `RHR: ${r.restingHr} bpm (${ctx.raw>0?'+':''}${ctx.raw}%)`;
+          title:function(ctx){return data[ctx[0].dataIndex].date||'';},
+          label:function(ctx){
+            var r=data[ctx.dataIndex];
+            var ds=ctx.dataset.label||'';
+            if(ds==='Kroki (% odchylenia)'&&ctx.raw!=null){
+              return 'Kroki: '+(r.steps!=null?r.steps.toLocaleString('pl'):'—')+' ('+(ctx.raw>0?'+':'')+ctx.raw+'%)';
             }
-            if(ctx.datasetIndex===0&&ctx.raw!=null){
-              const r=data[ctx.dataIndex];
-              return `Kroki: ${r.steps} (${ctx.raw>0?'+':''}${ctx.raw}%)`;
+            if(ds==='RHR (% odchylenia) +% = lepiej'&&ctx.raw!=null){
+              return 'RHR: '+(r.restingHr!=null?r.restingHr+' bpm':'—')+' ('+(ctx.raw>0?'+':'')+ctx.raw+'%)';
             }
             return ctx.raw;
+          },
+          afterBody:function(ctx){
+            var r=data[ctx[0].dataIndex];
+            var parts=[];
+            if(r.dist!=null) parts.push('Dystans: '+r.dist.toFixed(1)+' km');
+            if(r.distance_m!=null&&r.dist==null) parts.push('Dystans: '+(r.distance_m/1000).toFixed(1)+' km');
+            if(r.exerciseNames&&r.exerciseNames.length) parts.push('Trening: '+r.exerciseNames.join(', '));
+            return parts.length?parts.join(' · '):'';
           }
         }}
       }
