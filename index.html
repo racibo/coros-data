@@ -433,7 +433,9 @@ async function loadGoogleSheetsJSONP() {
 function computeRollingAvgs(data) {
   data.forEach((r,i)=>{
     const s7 = data.slice(Math.max(0,i-6),i+1).filter(Boolean);
+    const s14 = data.slice(Math.max(0,i-13),i+1).filter(Boolean);
     const s30 = data.slice(Math.max(0,i-29),i+1).filter(Boolean);
+    const s90 = data.slice(Math.max(0,i-89),i+1).filter(Boolean);
     const avg = (arr,key,n) => {const v=arr.map(x=>x[key]).filter(x=>x!=null);return v.length>=n?v.reduce((a,b)=>a+b,0)/v.length:null;};
     r._a7hrv = avg(s7,'hrv',1);
     r._a30hrv = avg(s30,'hrv',7);
@@ -450,8 +452,12 @@ function computeRollingAvgs(data) {
     r._a7steps = avg(s7,'steps',1);
     r._a30steps = avg(s30,'steps',7);
     r._a7weight = avg(s7,'weight',1);
+    r._a14weight = avg(s14,'weight',3);
     r._a30weight = avg(s30,'weight',7);
+    r._a90weight = avg(s90,'weight',14);
     r._bmi = r.weight!=null ? Math.round(r.weight / (1.77*1.77) * 10) / 10 : null;
+    r._bmiDev = r._bmi!=null ? Math.round((r._bmi - 22) * 10) / 10 : null;
+    r._idealWeight = 22 * 1.77 * 1.77; // BMI 22 ideal weight
     // Percentage deviations from 7d avg (positive = healthy, negative = unhealthy)
     r._pctHrv = r.hrv!=null && r._a7hrv!=null ? Math.round((r.hrv - r._a7hrv) / r._a7hrv * 100) : null;
     r._pctRhr = r.restingHr!=null && r._a7rhr!=null ? Math.round(-(r.restingHr - r._a7rhr) / r._a7rhr * 100) : null;
@@ -1002,45 +1008,85 @@ function renderActivityChart(data) {
 
 function renderWeightChart(data) {
   var ctx=document.getElementById('weightChart');
-  var vals=data.map(function(r){return r._pctWeight;});
-  var anyData = vals.some(function(v){return v!=null;});
+  var w=data.map(function(r){return r.weight;});
+  var anyData = w.some(function(v){return v!=null;});
   if(!anyData){ctx.style.display='none';return null;}
   ctx.style.display='block';
-  // rolling avg of _pctWeight (7-window)
-  var ma7 = data.map(function(r,i){
-    if(r._pctWeight==null) return null;
-    var sum=0,cnt=0;
-    for(var j=Math.max(0,i-6);j<=i;j++){if(data[j]._pctWeight!=null){sum+=data[j]._pctWeight;cnt++;}}
-    return cnt>0?Math.round(sum/cnt*10)/10:null;
-  });
+  var ma7=data.map(function(r){return r._a7weight;});
+  var ma14=data.map(function(r){return r._a14weight;});
+  var ma30=data.map(function(r){return r._a30weight;});
+  var ma90=data.map(function(r){return r._a90weight;});
+  var bmiDev=data.map(function(r){return r._bmiDev;});
   var labels=data.map(function(r){return r.date.slice(5);});
-  var axis=symAxis(data,'_pctWeight',5);
+  // y-axis range
+  var allW = w.concat(ma7,ma14,ma30,ma90).filter(function(v){return v!=null;});
+  var yMin = allW.length?Math.floor(Math.min.apply(null,allW)-2):60;
+  var yMax = allW.length?Math.ceil(Math.max.apply(null,allW)+2):80;
+  // BMI deviation secondary axis
+  var bd = bmiDev.filter(function(v){return v!=null;});
+  var bdAbs = bd.length?Math.max(Math.abs(Math.min.apply(null,bd)),Math.abs(Math.max.apply(null,bd))):3;
+  bdAbs = Math.max(bdAbs,2);
   makeChart(ctx,{
     type:'line',
     data:{
       labels:labels,
       datasets:[
-        {label:'Waga dzienna',data:vals,borderColor:'#60a5fa',backgroundColor:'rgba(96,165,250,0.15)',fill:true,pointRadius:3,pointBackgroundColor:vals.map(function(v){return v==null?'transparent':v>0?'#10b981':'#ef4444';}),borderWidth:1.5,spanGaps:true,tension:0.1},
-        {label:'Śr.krocz. 7d',data:ma7,borderColor:'#f59e0b',backgroundColor:'transparent',borderWidth:2,pointRadius:0,spanGaps:true,tension:0.3,borderDash:[4,3]}
+        {label:'Waga (kg)',data:w,borderColor:'#60a5fa',backgroundColor:'rgba(96,165,250,0.08)',fill:true,pointRadius:4,pointBackgroundColor:w.map(function(v){return v==null?'transparent':'#60a5fa';}),borderWidth:2,spanGaps:true,tension:0.1,yAxisID:'y'},
+        {label:'MA7',data:ma7,borderColor:'#f59e0b',borderWidth:1.5,pointRadius:0,spanGaps:true,tension:0.3,yAxisID:'y'},
+        {label:'MA14',data:ma14,borderColor:'#10b981',borderWidth:1,pointRadius:0,spanGaps:true,tension:0.3,borderDash:[3,2],yAxisID:'y'},
+        {label:'MA30',data:ma30,borderColor:'#8b5cf6',borderWidth:1,pointRadius:0,spanGaps:true,tension:0.3,borderDash:[4,3],yAxisID:'y'},
+        {label:'MA90',data:ma90,borderColor:'#ec4899',borderWidth:1,pointRadius:0,spanGaps:true,tension:0.3,borderDash:[6,4],yAxisID:'y'},
+        {label:'BMI odch. od 22',data:bmiDev,borderColor:'#ef4444',backgroundColor:'transparent',borderWidth:1,pointRadius:3,pointBackgroundColor:bmiDev.map(function(v){return v==null?'transparent':v>0?'#ef4444':'#10b981';}),spanGaps:true,tension:0.1,yAxisID:'y1'}
       ]
     },
     options:{...chartOpts,
-      scales:{y:{...chartOpts.scales.y,title:{display:true,text:'% odchylenia od \u015bredniej',color:'#94a3b8',font:{size:10}},min:axis.min,max:axis.max}},
+      scales:{y:{...chartOpts.scales.y,position:'left',title:{display:true,text:'kg',color:'#94a3b8',font:{size:10}},min:yMin,max:yMax},
+        y1:{position:'right',title:{display:true,text:'BMI odch. od 22',color:'#94a3b8',font:{size:10}},grid:{drawOnChartArea:false},min:-bdAbs-1,max:bdAbs+1}},
+      interaction:{mode:'index',intersect:false},
       plugins:{...chartOpts.plugins,
         tooltip:{callbacks:{
+          title:function(ctx){return data[ctx[0].dataIndex].date||'';},
           label:function(ctx){
-            if(ctx.datasetIndex===0 && ctx.raw==null)return'';
             var r=data[ctx.dataIndex];
-            if(ctx.datasetIndex===1) return 'MA7: '+(ctx.raw>0?'+':'')+ctx.raw+'%';
-            var t='Waga: '+(r.weight!=null?r.weight+' kg':'—');
-            if(r._bmi)t+=' | BMI: '+r._bmi;
-            if(ctx.raw!=null) t+=' ('+(ctx.raw>0?'+':'')+ctx.raw+'%)';
-            return t;
+            var ds=ctx.dataset.label||'';
+            if(ds==='Waga (kg)'){
+              if(ctx.raw==null)return '';
+              var prev=ctx.dataIndex>0?data[ctx.dataIndex-1].weight:null;
+              var chg=prev!=null&&r.weight!=null?Math.round((r.weight-prev)*10)/10:null;
+              var sym=chg!=null?(chg>0?' ↑':(chg<0?' ↓':' →')):'';
+              var col=chg!=null?(chg>0?'#ef4444':(chg<0?'#10b981':'#94a3b8')):'#fff';
+              return ds+': '+r.weight+' kg'+(chg!=null?' <span style="color:'+col+'">('+(chg>0?'+':'')+chg+' kg'+sym+')</span>':'');
+            }
+            if(ds==='BMI odch. od 22'){
+              if(ctx.raw==null)return '';
+              var col=ctx.raw>0?'#ef4444':'#10b981';
+              var txt='BMI odch. od 22: <span style="color:'+col+'">'+(ctx.raw>0?'+':'')+ctx.raw+'</span>';
+              if(r._idealWeight!=null&&r.weight!=null){
+                var wd=Math.round((r.weight-r._idealWeight)*10)/10;
+                txt+=' ('+(wd>0?'+':'')+wd+' kg od wzorca)';
+              }
+              return txt;
+            }
+            if(ctx.raw!=null) return ds+': '+ctx.raw+' kg';
+            return '';
+          },
+          afterBody:function(ctx){
+            var r=data[ctx[0].dataIndex];
+            var parts=[];
+            if(r._a7weight!=null) parts.push('MA7: '+r._a7weight+' kg');
+            if(r._a14weight!=null) parts.push('MA14: '+r._a14weight+' kg');
+            if(r._a30weight!=null) parts.push('MA30: '+r._a30weight+' kg');
+            if(r._a90weight!=null) parts.push('MA90: '+r._a90weight+' kg');
+            if(r._bmi!=null){
+              var bc=r._bmi>25?'#ef4444':(r._bmi<18.5?'#f59e0b':'#10b981');
+              parts.push('BMI: <span style="color:'+bc+'">'+r._bmi+'</span>');
+            }
+            return parts.join(' · ');
           }
         }}
       }
     },
-    plugins:[pctLabels]
+    plugins:[]
   });
 }
 function abbrTitle(s) {
