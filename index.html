@@ -278,19 +278,18 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   <div class="section-title" onclick="this.classList.toggle('show-def')">📅 Tabela wszystkich dni<span class="def-icon">ⓘ</span>
     <span class="def-text">Pełne zestawienie wszystkich wskaźników dla każdego dnia w wybranym zakresie. Możesz przeglądać, porównywać i szukać zależności samodzielnie. Przewiń w prawo by zobaczyć więcej kolumn.</span>
   </div>
-  <div class="section-sub">Wszystkie wskaźniki każdego dnia · <span class="good">zielony</span> = dobry · <span class="bad">czerwony</span> = zły · 🚴 = rower · 🔋 = e-bike · 🌙 = faza księżyca · 🌧️ = deszcz</div>
+  <div class="section-sub">Wszystkie wskaźniki każdego dnia · <span class="good">zielony</span> = dobry · <span class="bad">czerwony</span> = zły · 🚴 = rower · 🔋 = e-bike · 🌙 = faza księżyca</div>
   <div id="dataTableWrap" style="overflow-x:auto;font-size:10px;font-family:var(--mono);color:var(--text2)">Ładowanie…</div>
 </div>
 
 <!-- /end sections -->
 
-<div id="loading" style="text-align:center;padding:60px 0;color:var(--dim);font-family:var(--mono)">Ładowanie danych…</div>
+<div id="loading" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(11,15,25,0.92);display:flex;align-items:center;justify-content:center;z-index:999;font-family:var(--mono);color:var(--dim);font-size:16px;display:none">Ładowanie danych…</div>
 </div>
 
 <script>
 const SHEET_ID = "1xPJ8xBAPsDv2NfZaKNtzcv6g8hYCVuA40A9iPKN--eo";
-const WEATHER_SHEET_ID = "1-bCTdLFUMI5tzxgZbfFDS-hQhN4nksFhQa25fWooyB0";
-const SHEETS = { activity:"1277227831", sleep:"1078830", vitals:"111422029", body:"1828589559", weather:"0" };
+const SHEETS = { activity:"1277227831", sleep:"1078830", vitals:"111422029", body:"1828589559" };
 
 // ── Moon phase (pure JS, no API) ─────────────────
 function calcMoonPhase(dateStr) {
@@ -318,63 +317,6 @@ function calcMoonPhase(dateStr) {
   return { phase: phaseName, label: phaseLabel, illumination: Math.round(illumination*100), age: phaseAge };
 }
 
-// ── Weather: Google Sheet → fallback Open-Meteo (Gdańsk) ──
-async function loadWeatherSheet() {
-  // 1) Try Google Sheet
-  try {
-    var url = "https://docs.google.com/spreadsheets/d/"+WEATHER_SHEET_ID+"/export?format=csv&gid="+SHEETS.weather;
-    var resp = await fetch(url);
-    if(resp.ok){
-      var text = await resp.text();
-      var lines = text.split("\n").filter(function(l){return l.trim();});
-      if(lines.length>=2){
-        var headers = lines[0].split(",").map(function(h){return h.trim().replace(/^"+|"+$/g,'');});
-        var map = {};
-        for(var i=1;i<lines.length;i++){
-          var vals = lines[i].split(",").map(function(v){return v.trim().replace(/^"+|"+$/g,'');});
-          var row = {};
-          for(var j=0;j<headers.length;j++) row[headers[j]] = vals[j]||'';
-          var ds = row.date || row.data || row.Date || '';
-          if(ds){
-            var parts = ds.match(/(\d{4})-(\d{2})-(\d{2})/);
-            if(!parts) parts = ds.match(/(\d{2})\.(\d{2})\.(\d{4})/);
-            if(parts){
-              var key = parts[1].length===4 ? parts[0].slice(0,10) : parts[3]+'-'+parts[2]+'-'+parts[1];
-              map[key] = row;
-            }
-          }
-        }
-        if(Object.keys(map).length) return map;
-      }
-    }
-  } catch(e){ /* fall through */ }
-
-  // 2) Fallback: Open-Meteo historical API (Gdańsk 54.35,18.65)
-  try {
-    if(!allData || !allData.days || !allData.days.length) return null;
-    var dates = allData.days.map(function(r){return r.date;}).filter(Boolean).sort();
-    var startDate = dates[0], endDate = dates[dates.length-1];
-    if(!startDate||!endDate) return null;
-    var apiUrl = "https://archive-api.open-meteo.com/v1/archive?latitude=54.35&longitude=18.65&start_date="+startDate+"&end_date="+endDate+"&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Europe/Warsaw";
-    var r2 = await fetch(apiUrl);
-    if(!r2.ok) return null;
-    var json = await r2.json();
-    if(!json.daily||!json.daily.time) return null;
-    var om = {};
-    for(var k=0;k<json.daily.time.length;k++){
-      var day = json.daily.time[k];
-      var tmax = json.daily.temperature_2m_max[k];
-      var tmin = json.daily.temperature_2m_min[k];
-      var precip = json.daily.precipitation_sum[k];
-      om[day] = {
-        temp: tmax!=null ? String(Math.round((tmax+tmin)/2*10)/10) : '',
-        rain: (precip!=null&&precip>0) ? 'tak' : 'nie',
-        rain_mm: precip!=null ? String(precip) : '',
-      };
-    }
-    return om;
-  } catch(e){ return null; }
-}
 
 const toN = v => v==null||v===""?null:parseFloat(String(v).replace(",","."));
 const pDate = v => {
@@ -390,21 +332,50 @@ const pDate = v => {
 let allData = { days: [], _syncedAt: null };
 let charts = {};
 
-async function loadJSON() {
-  const r = await fetch("data.json");
+async function loadJSON(noCache) {
+  var url = "data.json";
+  if(noCache) url += "?_=" + Date.now();
+  const r = await fetch(url);
   if(!r.ok) throw new Error("no data.json");
   const raw = await r.json();
   if(Array.isArray(raw)) return { days: raw, _syncedAt: null };
   return raw;
 }
 
+async function loadSheetGviz(gid, fields) {
+  var url = "https://docs.google.com/spreadsheets/d/"+SHEET_ID+"/gviz/tq?tqx=out:json&gid="+gid+"&_="+Date.now();
+  var resp = await fetch(url);
+  var text = await resp.text();
+  // Strip JSONP wrapper
+  var json = text.replace(/^\/\*O_o\*\/\s*google\.visualization\.Query\.setResponse\(/,'').replace(/\);?\s*$/,'');
+  var data = JSON.parse(json);
+  if(!data.table||!data.table.cols||!data.table.rows) return [];
+  var cols = data.table.cols;
+  var idx = function(f) {
+    for(var j=0;j<cols.length;j++){
+      if(cols[j]&&cols[j].label&&cols[j].label.toLowerCase().includes(f)) return j;
+    }
+    return -1;
+  };
+  var out = [];
+  for(var i=0;i<data.table.rows.length;i++){
+    var cells = data.table.rows[i].c||[];
+    var o = {};
+    fields.forEach(function(f){
+      var j = idx(f);
+      if(j>=0&&cells[j]&&cells[j].v!=null&&cells[j].v!=='') o[f] = String(cells[j].v);
+    });
+    if(Object.keys(o).length) out.push(o);
+  }
+  return out;
+}
 async function loadGoogleSheets() {
-  const p = (t,fields)=>{const rows=t.split("\n").filter(Boolean);const h=rows[0].split(",").map(x=>x.trim().replace(/^"+|"+$/g,'').toLowerCase());const idx=f=>{for(var j=0;j<h.length;j++){if(h[j].includes(f))return j;}return -1;};const out=[];for(var i=1;i<rows.length;i++){var v=rows[i].split(",").map(x=>x.trim().replace(/^"+|"+$/g,''));var o={};fields.forEach(function(f){var j=idx(f);if(j>=0)o[f]=v[j];});out.push(o);}return out;};
-  const fe = async gid => {const r=await fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`);return r.text();};
-  const actR = p(await fe(SHEETS.activity),["date","steps","distance","calories","exercise","source"]);
-  const slpR = p(await fe(SHEETS.sleep),["date","deep","rem","light","source"]);
-  const vitR = p(await fe(SHEETS.vitals),["date","min","max","avg","hrv","rhr","source"]);
-  const bodR = p(await fe(SHEETS.body),["date","weight"]);
+  const [actR, slpR, vitR, bodR] = await Promise.all([
+    loadSheetGviz(SHEETS.activity,["date","steps","distance","calories","exercise","source"]),
+    loadSheetGviz(SHEETS.sleep,["date","deep","rem","light","source"]),
+    loadSheetGviz(SHEETS.vitals,["date","min","max","avg","hrv","rhr","source"]),
+    loadSheetGviz(SHEETS.body,["date","weight"])
+  ]);
   const map={};
   const ensure=k=>{if(!map[k])map[k]={date:k};return k;};
   actR.forEach(r=>{
@@ -462,6 +433,7 @@ function computeRollingAvgs(data) {
     r._a30steps = avg(s30,'steps',7);
     r._a7weight = avg(s7,'weight',1);
     r._a30weight = avg(s30,'weight',7);
+    r._bmi = r.weight!=null ? Math.round(r.weight / (1.77*1.77) * 10) / 10 : null;
     // Percentage deviations from 7d avg (positive = healthy, negative = unhealthy)
     r._pctHrv = r.hrv!=null && r._a7hrv!=null ? Math.round((r.hrv - r._a7hrv) / r._a7hrv * 100) : null;
     r._pctRhr = r.restingHr!=null && r._a7rhr!=null ? Math.round(-(r.restingHr - r._a7rhr) / r._a7rhr * 100) : null;
@@ -541,22 +513,10 @@ function calcStatus(r,prev,data) {
 
 function processData(raw, range) {
   let data = raw.filter(r=>r.date).sort((a,b)=>a.date.localeCompare(b.date));
-  const fields = ['steps','cal','dist','hrAvg','hrMin','hrMax','deep','rem','light','awake','sleepH','sleepScore','hrv','restingHr','weight','trainingLoad','trainingLoadRatio','ati','cti','tib','moonPhase','moonLabel','moonIllum','rain','rainMm','temp','weatherNote'];
+  const fields = ['steps','cal','dist','hrAvg','hrMin','hrMax','deep','rem','light','awake','sleepH','sleepScore','hrv','restingHr','weight','trainingLoad','trainingLoadRatio','ati','cti','tib','moonPhase','moonLabel','moonIllum'];
   data.forEach(r=>{fields.forEach(f=>{if(!(f in r))r[f]=null;});if(!r.exerciseNames)r.exerciseNames=[];});
   // moon phase
   data.forEach(function(r){ var mp = calcMoonPhase(r.date); r.moonPhase = mp.phase; r.moonLabel = mp.label; r.moonIllum = mp.illumination; });
-  // weather merge (set later by loadWeatherSheet)
-  if(allData._weatherMap){
-    data.forEach(function(r){
-      var w = allData._weatherMap[r.date];
-      if(w){
-        r.rain = w.rain||w.opady||w.deszcz||'';
-        r.temp = toN(w.temp||w.temperature||w.temperatura);
-        r.rainMm = toN(w.rain_mm||w.opady_mm||w.precipitation);
-        r.weatherNote = w.weather||w.pogoda||w.conditions||'';
-      }
-    });
-  }
   computeRollingAvgs(data);
   if(range>0&&range<data.length)data=data.slice(-range);
   return data;
@@ -1039,7 +999,18 @@ function renderWeightChart(data) {
       ]
     },
     options:{...chartOpts,
-      scales:{y:{...chartOpts.scales.y,title:{display:true,text:'% odchylenia od \u015bredniej',color:'#94a3b8',font:{size:10}},min:axis.min,max:axis.max}}
+      scales:{y:{...chartOpts.scales.y,title:{display:true,text:'% odchylenia od \u015bredniej',color:'#94a3b8',font:{size:10}},min:axis.min,max:axis.max}},
+      plugins:{...chartOpts.plugins,
+        tooltip:{callbacks:{
+          label:function(ctx){
+            if(ctx.raw==null)return'';
+            var r=data[ctx.dataIndex];
+            var t='Waga: '+r.weight+' kg';
+            if(r._bmi)t+=' | BMI: '+r._bmi;
+            return t;
+          }
+        }}
+      }
     },
     plugins:[pctLabels]
   });
@@ -1136,38 +1107,39 @@ function profileGroup(data, label, groupDays, icon) {
   return html;
 }
 
-function renderDayProfiles(data) {
+function renderDayProfiles(data, range) {
   var el = document.getElementById('dayProfileCards');
   var cards = [];
   var groups = [];
+  var n = profileCount();
   function addProfile(label, groupDays, icon) {
     var h = profileGroup(data, label, groupDays, icon);
     if(h){ cards.push(h); groups.push({label, groupDays, icon}); }
   }
 
-  // top 5 steps
+  // top N steps
   var stepSorted = data.slice().sort(function(a,b){return (b.steps||0)-(a.steps||0);});
-  addProfile('5 najwięcej kroków', stepSorted.slice(0,5), '🏆');
-  // bottom 5 steps (>0)
-  var bottom5 = stepSorted.filter(function(r){return r.steps>0;}).slice(-5);
-  addProfile('5 najmniej kroków', bottom5, '🦥');
+  addProfile(n+' najwięcej kroków', stepSorted.slice(0,n), '🏆');
+  // bottom N steps (>0)
+  var bottomN = stepSorted.filter(function(r){return r.steps>0;}).slice(-n);
+  addProfile(n+' najmniej kroków', bottomN, '🦥');
 
-  // top 5 distance
+  // top N distance
   var distSorted = data.slice().sort(function(a,b){return (b.dist||0)-(a.dist||0);});
-  addProfile('5 najdłuższy dystans', distSorted.slice(0,5), '📏');
+  addProfile(n+' najdłuższy dystans', distSorted.slice(0,n), '📏');
 
-  // top 5 HRV (best recovery)
+  // top N HRV (best recovery)
   var hrvSorted = data.slice().sort(function(a,b){return (b.hrv||0)-(a.hrv||0);});
-  addProfile('5 najwyższe HRV', hrvSorted.slice(0,5), '💚');
-  // bottom 5 RHR (lowest resting heart rate = best recovery)
+  addProfile(n+' najwyższe HRV', hrvSorted.slice(0,n), '💚');
+  // bottom N RHR (lowest resting heart rate = best recovery)
   var rhrSorted = data.slice().filter(function(r){return r.restingHr!=null;}).sort(function(a,b){return (a.restingHr||0)-(b.restingHr||0);});
-  addProfile('5 najniższe RHR', rhrSorted.slice(0,5), '💚');
+  addProfile(n+' najniższe RHR', rhrSorted.slice(0,n), '💚');
 
   // lowest weight / highest weight
   var weightSorted = data.slice().filter(function(r){return r.weight!=null;}).sort(function(a,b){return (a.weight||0)-(b.weight||0);});
-  if(weightSorted.length>=3){
-    addProfile('3 najniższa waga', weightSorted.slice(0,3), '⬇️⚖️');
-    addProfile('3 najwyższa waga', weightSorted.slice(-3), '⬆️⚖️');
+  if(weightSorted.length>=n){
+    addProfile(n+' najniższa waga', weightSorted.slice(0,n), '⬇️⚖️');
+    addProfile(n+' najwyższa waga', weightSorted.slice(-n), '⬆️⚖️');
   }
 
   // bike days
@@ -1183,20 +1155,6 @@ function renderDayProfiles(data) {
   var newMoon = data.filter(function(r){return r.moonPhase==='new';});
   addProfile('Pełnia', fullMoon, '🌕');
   addProfile('Nów', newMoon, '🌑');
-
-  // ── Rain profile (if weather data exists) ──
-  var rainyDays = data.filter(function(r){
-    var ra = (r.rain||'').toString().toLowerCase();
-    return ra=='tak'||ra=='yes'||ra=='1'||ra=='true'||r.rainMm>0;
-  });
-  addProfile('Dni deszczowe', rainyDays, '🌧️');
-  // ── Temperature profiles (if weather data exists) ──
-  var tempDays = data.filter(function(r){return r.temp!=null;});
-  if(tempDays.length>=5){
-    var tempSorted = tempDays.slice().sort(function(a,b){return (a.temp||0)-(b.temp||0);});
-    addProfile('Najzimniejsze dni', tempSorted.slice(0,5), '🥶');
-    addProfile('Najcieplejsze dni', tempSorted.slice(-5), '🥵');
-  }
 
   // ── Summary: which conditions yield the best overall wellness ──
   var overall = {hrv:0,rhr:0,sleep:0,weight:0};
@@ -1270,7 +1228,6 @@ function renderDataTable(data) {
     var d = r.date.slice(5);
     var bike = bikeIcon(r);
     var moonIcon = r.moonPhase==='full'?'🌕':r.moonPhase==='new'?'🌑':r.moonIllum>50?'🌓':'🌒';
-    var rainIcon = (r.rainMm>0||(r.rain||'').toString().toLowerCase()=='tak')?'🌧️':'';
     return '<tr>' +
       '<td style="padding:2px 6px;white-space:nowrap">' + d + '</td>' +
       '<td style="padding:2px 6px;text-align:right">' + fmt(r.steps) + '</td>' +
@@ -1281,7 +1238,6 @@ function renderDataTable(data) {
       '<td style="padding:2px 6px;text-align:right;color:' + (r.trainingLoadRatio!=null&&r.trainingLoadRatio>1.5?'var(--danger)':'var(--text2)') + '">' + fmt(r.trainingLoadRatio) + '</td>' +
       '<td style="padding:2px 6px;text-align:center;white-space:nowrap">' + bike + '</td>' +
       '<td style="padding:2px 6px;text-align:center" title="' + r.moonLabel + '">' + moonIcon + '</td>' +
-      '<td style="padding:2px 6px;text-align:center">' + rainIcon + '</td>' +
       '</tr>';
   }).join('');
   el.innerHTML = '<table style="width:100%;border-collapse:collapse;line-height:1.6">' +
@@ -1295,7 +1251,6 @@ function renderDataTable(data) {
     '<th style="padding:2px 6px;text-align:right" title="' + abbrTitle('TLR') + '">TLR</th>' +
     '<th style="padding:2px 6px;text-align:center" title="🚴 = rower · 🔋 = e-bike">🚴/🔋</th>' +
     '<th style="padding:2px 6px;text-align:center" title="Faza Księżyca – nów, pełnia, kwadra">🌙</th>' +
-    '<th style="padding:2px 6px;text-align:center" title="🌧️ = deszcz (opady wg arkusza pogodowego)">🌧️</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
@@ -1312,6 +1267,7 @@ function renderStatusCard(data) {
   
   const mEl=document.getElementById('statusMetrics');
   const parts=[];
+  const extras=[];
   
   if(refDay.hrv!=null&&refDay._a7hrv!=null){
     const pct=Math.round((refDay.hrv/refDay._a7hrv-1)*100);
@@ -1320,10 +1276,14 @@ function renderStatusCard(data) {
     parts.push(`<div><span title="HRV (Heart Rate Variability - zmienno\u015b\u0107 rytmu serca) - wy\u017csze = lepiej">Regeneracja</span> <span class="num ${cls}">${sign}${pct}%</span> <span style="font-size:10px;color:var(--dim)">vs \u015bredniej</span></div>`);
   }
   if(refDay.restingHr!=null&&refDay._a7rhr!=null){
-    const d=Math.round(refDay.restingHr-refDay._a7rhr);
-    const sign=d>0?'+':'';
-    const cls=d<=0?'good':d>=3?'bad':'neutral';
-    parts.push(`<div><span title="RHR (Resting Heart Rate - t\u0119tno spoczynkowe) - ni\u017csze = lepiej">T\u0119tno spoczynkowe</span> <span class="num ${cls}">${sign}${d} bpm</span> <span style="font-size:10px;color:var(--dim)">vs \u015bredniej</span></div>`);
+    const pct=refDay._pctRhr;
+    const sign=pct>0?'+':'';
+    const cls=pct>=5?'good':pct<=-5?'bad':'neutral';
+    parts.push(`<div><span title="RHR (Resting Heart Rate - t\u0119tno spoczynkowe) - ni\u017csze = lepiej">T\u0119tno spoczynkowe</span> <span class="num ${cls}">${sign}${pct}%</span> <span style="font-size:10px;color:var(--dim)">vs \u015bredniej</span></div>`);
+    extras.push('RHR: '+refDay.restingHr+' bpm (śr. '+Math.round(refDay._a7rhr)+' bpm)');
+  }
+  if(refDay.weight!=null){
+    parts.push(`<div><span title="BMI = waga (kg) / wzrost\u00b2 (m). Przy wzro\u015bcie 177 cm">BMI</span> <span class="num neutral">${refDay._bmi||'?'}</span> <span style="font-size:10px;color:var(--dim)">(${refDay.weight} kg)</span></div>`);
   }
   if(refDay.sleepScore!=null){
     var pct=refDay._pctSleep; var pctLabel='';
@@ -1340,8 +1300,9 @@ function renderStatusCard(data) {
   mEl.innerHTML=parts.join('');
   
   const rEl=document.getElementById('statusReasons');
-  if(status.reasons&&status.reasons.length){
-    rEl.textContent='\u2022 '+status.reasons.join(' \u2022 ');
+  const all = (extras||[]).concat(status.reasons||[]);
+  if(all.length){
+    rEl.textContent='\u2022 '+all.join(' \u2022 ');
   }else{
     rEl.textContent='';
   }
@@ -1353,6 +1314,11 @@ function toggle(el) {
 }
 
 let currentRange=14;
+function profileCount() {
+  if(currentRange<=7) return 3;
+  if(currentRange<=14) return 5;
+  return 7;
+}
 
 function setupRangeSelect() {
   const sel=document.getElementById('rangeSelect');
@@ -1386,60 +1352,37 @@ function render(range) {
   try{charts.weightChart=renderWeightChart(data);}catch(e){console.error('weightChart',e);}
   try{renderAverages(data);}catch(e){console.error('averages',e);}
   try{renderCorrelations(data);}catch(e){console.error('correlations',e);}
-  try{renderDayProfiles(data);}catch(e){console.error('dayProfiles',e);}
+  try{renderDayProfiles(data,currentRange);}catch(e){console.error('dayProfiles',e);}
   try{renderDataTable(data);}catch(e){console.error('dataTable',e);}
 }
 
+var _selectSetup = false;
 async function init() {
   document.getElementById('loading').style.display='block';
-  let raw;
+  var raw = null;
+  // Primary: Google Sheets (works cross-origin via gviz/tq)
   try{
-    raw=await loadJSON();
-  }catch(e){
-    raw=null;
-  }
-  // Always try to merge fresh Google Sheets data on top
-  try{
-    var fresh = await loadGoogleSheets();
-    if(fresh && fresh.days){
-      if(raw && raw.days){
-        var merged = {};
-        raw.days.forEach(function(d){ merged[d.date] = d; });
-        fresh.days.forEach(function(d){
-          if(merged[d.date]){
-            Object.keys(d).forEach(function(k){ if(k!=='date') merged[d.date][k] = d[k]; });
-          } else {
-            merged[d.date] = d;
-          }
-        });
-        raw.days = Object.values(merged).sort(function(a,b){return a.date.localeCompare(b.date);});
-      } else {
-        raw = fresh;
-      }
+    raw = await loadGoogleSheets();
+  }catch(e){ /* fall through */ }
+  // Fallback: local data.json
+  if(!raw||!raw.days||!raw.days.length){
+    try{
+      raw = await loadJSON(true);
+    }catch(e){
+      raw = null;
     }
-  } catch(e){}
+  }
   if(!raw){
     document.getElementById('loading').innerHTML='❌ Nie udało się załadować danych.';
     return;
   }
-  allData=raw;
+  allData = raw;
   document.getElementById('loading').style.display='none';
 
-  // Show sync timestamp
   const syncEl = document.getElementById('lastSynced');
-  if(raw._syncedAt){
-    const d = new Date(raw._syncedAt);
-    syncEl.textContent = 'Synchronizacja: ' + d.toLocaleString('pl-PL');
-  } else {
-    syncEl.textContent = 'Odświeżono: ' + new Date().toLocaleString('pl-PL');
-  }
+  syncEl.textContent = 'Odświeżono: ' + new Date().toLocaleString('pl-PL');
 
-  // Load weather (async, non-blocking)
-  loadWeatherSheet().then(function(wm){
-    if(wm){ allData._weatherMap = wm; render(currentRange); }
-  });
-  
-  setupRangeSelect();
+  if(!_selectSetup){ setupRangeSelect(); _selectSetup = true; }
   render(currentRange);
 }
 
@@ -1447,21 +1390,8 @@ async function refreshSheets() {
   document.getElementById('loading').style.display='block';
   try {
     var fresh = await loadGoogleSheets();
-    if(fresh && fresh.days){
-      if(allData && allData.days){
-        var merged = {};
-        allData.days.forEach(function(d){ merged[d.date] = d; });
-        fresh.days.forEach(function(d){
-          if(merged[d.date]){
-            Object.keys(d).forEach(function(k){ if(k!=='date') merged[d.date][k] = d[k]; });
-          } else {
-            merged[d.date] = d;
-          }
-        });
-        allData.days = Object.values(merged).sort(function(a,b){return a.date.localeCompare(b.date);});
-      } else {
-        allData = fresh;
-      }
+    if(fresh && fresh.days && fresh.days.length){
+      allData = fresh;
       document.getElementById('lastSynced').textContent = 'Odświeżono: ' + new Date().toLocaleString('pl-PL');
       render(currentRange);
       document.getElementById('loading').style.display='none';
