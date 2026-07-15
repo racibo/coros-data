@@ -414,7 +414,7 @@ async def main():
         region = os.environ.get("COROS_REGION", "eu")
         if email and password:
             print("Logowanie do Coros…")
-            auth = await login(email, password, region, skip_mobile=False)
+            auth = await login(email, password, region, skip_mobile=True)
             _save_auth_cache(auth, AUTH_CACHE_PATH)
         else:
             print("Brak autoryzacji Coros. Użyj: coros-mcp auth")

@@ -29,7 +29,8 @@ jobs:
           path: coros_auth.json
           key: coros-auth-prod
 
-      - name: Fetch data (Coros)
+      - name: Fetch data (Coros) — may fail if Coros API unavailable
+        continue-on-error: true
         env:
           COROS_EMAIL: ${{ secrets.COROS_EMAIL }}
           COROS_PASSWORD: ${{ secrets.COROS_PASSWORD }}
@@ -37,14 +38,22 @@ jobs:
         run: python fetch_coros.py 2>&1 | tee debug.log
 
       - name: Merge Strava activities
+        continue-on-error: true
         run: python merge_strava.py activities.csv 2>&1 | tee -a debug.log
+
+      - name: Ensure at least a minimal data.json exists for the deploy
+        run: |
+          if [ ! -f data.json ]; then
+            echo '{"_syncedAt":"","days":[]}' > data.json
+            echo "Created empty data.json (fetch must have failed)"
+          fi
 
       - name: Prepare deploy folder
         run: |
           mkdir -p _site
           cp index.html _site/ 2>/dev/null || true
-          cp data.json _site/
-          cp debug.log _site/ 2>/dev/null || true
+          [ -f data.json ] && cp data.json _site/ || true
+          [ -f debug.log ] && cp debug.log _site/ 2>/dev/null || true
           [ -f netlify.toml ] && cp netlify.toml _site/ || true
 
       - name: Deploy to Netlify
