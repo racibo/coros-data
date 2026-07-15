@@ -384,7 +384,7 @@ function gvizToRows(gid, fields) {
       var o = {};
       fields.forEach(function(f){
         var j = idx(f);
-        if(j>=0&&cells[j]&&cells[j].v!=null&&cells[j].v!=='') o[f] = String(cells[j].v);
+        if(j>=0&&cells[j]&&cells[j].v!=null&&cells[j].v!=='') o[f] = typeof cells[j].v==='object'&&cells[j].v.toISOString?cells[j].v.toISOString().slice(0,10):String(cells[j].v);
       });
       if(Object.keys(o).length) out.push(o);
     }
@@ -428,6 +428,7 @@ async function loadGoogleSheetsJSONP() {
   });
   bodR.forEach(r=>{
     const k=ensure(pDate(r.date||r.time)?.toISOString().slice(0,10));
+    if(!k||k==='undefined')return;
     const w=toN(r.weight);if(w)map[k].weight=w;
   });
   return { days: Object.values(map), _syncedAt: null };
