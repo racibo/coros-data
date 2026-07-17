@@ -32,7 +32,8 @@ jobs:
           key: coros-auth-prod
 
       - name: Show data.json timestamp before
-        run: echo "Before fetch: $(head -c 50 data.json 2>/dev/null || echo 'no file')"
+        run: |
+          echo "Before fetch: $(head -c 50 data.json 2>/dev/null || echo 'no file')"
 
       - name: Fetch data (Coros) — may fail if Coros API unavailable
         continue-on-error: true
@@ -43,7 +44,8 @@ jobs:
         run: python fetch_coros.py 2>&1 | tee debug.log
 
       - name: Show data.json timestamp after
-        run: echo "After fetch: $(head -c 50 data.json 2>/dev/null || echo 'no file')"
+        run: |
+          echo "After fetch: $(head -c 50 data.json 2>/dev/null || echo 'no file')"
 
       - name: Merge Strava activities
         continue-on-error: true
