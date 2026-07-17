@@ -58,17 +58,6 @@ jobs:
           [ -f debug.log ] && cp debug.log _site/ 2>/dev/null || true
           [ -f netlify.toml ] && cp netlify.toml _site/ || true
 
-      - name: Debug – list files and check zip
-        run: |
-          echo "=== _site contents ==="
-          ls -la _site/
-          echo "=== zip availability ==="
-          which zip || echo "zip NOT FOUND"
-          echo "=== data.json syncedAt ==="
-          python3 -c "import json; d=json.load(open('_site/data.json')); print(d.get('_syncedAt','UNKNOWN'))"
-          echo "=== data.json day count ==="
-          python3 -c "import json; d=json.load(open('_site/data.json')); print(len(d.get('days',[]))); print('days:', sorted(set(str(x['ds']) for x in d.get('days',[])))[-3:])"
-
       - name: Deploy to Netlify
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_TOKEN }}
@@ -84,4 +73,4 @@ jobs:
             "https://api.netlify.com/api/v1/sites/${NETLIFY_SITE_ID}/deploys")
           echo "HTTP_CODE=$HTTP_CODE"
           cat deploy-result.json
-          python3 -c "import json,sys;r=json.load(open('deploy-result.json'));d=r.get('deploy',r);print('state:%s'%d.get('state'));print('published:%s'%d.get('published'));print('url:%s'%d.get('ssl_url')or d.get('url'));print('created:%s'%d.get('created_at'));print('files:%d'%len(d.get('files',{})))"
+          python3 -c "import json;r=json.load(open('deploy-result.json'));d=r.get('deploy',r);print('state:',d.get('state'));print('published:',d.get('published'));print('url:',d.get('ssl_url')or d.get('url'));print('created:',d.get('created_at'));print('files:',len(d.get('files',{})))"
