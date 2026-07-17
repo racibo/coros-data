@@ -58,7 +58,14 @@ jobs:
           [ -f debug.log ] && cp debug.log _site/ 2>/dev/null || true
           [ -f netlify.toml ] && cp netlify.toml _site/ || true
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install netlify-cli
+        run: npm install -g netlify-cli
+
       - name: Deploy to Netlify
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_TOKEN }}
-        run: npx netlify-cli deploy --prod --dir=_site --site=${{ secrets.NETLIFY_SITE_ID }} --message="Daily data update $(date -u +%F)"
+        run: netlify deploy --prod --dir=_site --site=${{ secrets.NETLIFY_SITE_ID }} --message="Daily data update $(date -u +%F)" 2>&1 | tee -a debug.log
