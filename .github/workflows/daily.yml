@@ -31,6 +31,9 @@ jobs:
           path: coros_auth.json
           key: coros-auth-prod
 
+      - name: Show data.json timestamp before
+        run: echo "Before fetch: $(head -c 50 data.json 2>/dev/null || echo 'no file')"
+
       - name: Fetch data (Coros) — may fail if Coros API unavailable
         continue-on-error: true
         env:
@@ -38,6 +41,9 @@ jobs:
           COROS_PASSWORD: ${{ secrets.COROS_PASSWORD }}
           COROS_AUTH_CACHE: coros_auth.json
         run: python fetch_coros.py 2>&1 | tee debug.log
+
+      - name: Show data.json timestamp after
+        run: echo "After fetch: $(head -c 50 data.json 2>/dev/null || echo 'no file')"
 
       - name: Merge Strava activities
         continue-on-error: true
@@ -57,6 +63,7 @@ jobs:
           [ -f data.json ] && cp data.json _site/ || true
           [ -f debug.log ] && cp debug.log _site/ 2>/dev/null || true
           [ -f netlify.toml ] && cp netlify.toml _site/ || true
+          echo "=== _site contents ===" && ls -la _site/ && echo "=== _site/data.json line 1 ===" && head -1 _site/data.json
 
       - uses: actions/setup-node@v4
         with:
@@ -68,4 +75,10 @@ jobs:
       - name: Deploy to Netlify
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_TOKEN }}
-        run: netlify deploy --prod --dir=_site --site=${{ secrets.NETLIFY_SITE_ID }} --message="Daily data update $(date -u +%F)" 2>&1 | tee -a debug.log
+        run: |
+          echo "Deploying to Netlify..."
+          netlify deploy --prod --dir=_site --site=${{ secrets.NETLIFY_SITE_ID }} --message="Daily data update $(date -u +%F)" --json 2>&1 | tee deploy-result.json
+          echo "=== Deploy result ==="
+          cat deploy-result.json
+          # Copy result to _site so it's visible in the deployed debug log
+          cp deploy-result.json _site/ 2>/dev/null || true
