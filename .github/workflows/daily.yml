@@ -63,12 +63,15 @@ jobs:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
         run: |
-          which zip || (apt-get update -qq && apt-get install -y -qq zip)
-          cd _site && zip -r ../site.zip . && cd ..
-          HTTP_CODE=$(curl -X POST --fail -w "%{http_code}" -s -o deploy-result.json \
+          cd _site && python3 -c "import shutil;shutil.make_archive('../site','zip','.')" && cd ..
+          echo "site.zip: $(wc -c < site.zip) bytes"
+          HTTP_CODE=$(curl -X POST -s -w "%{http_code}" -o deploy-result.json \
             -H "Authorization: Bearer ${NETLIFY_AUTH_TOKEN}" \
             -H "Content-Type: application/zip" \
             --data-binary @site.zip \
             "https://api.netlify.com/api/v1/sites/${NETLIFY_SITE_ID}/deploys")
-          echo "HTTP_CODE=$HTTP_CODE" && cat deploy-result.json
+          echo "HTTP_CODE=$HTTP_CODE"
+          cat deploy-result.json
           python3 -c "import json;r=json.load(open('deploy-result.json'));d=r.get('deploy',r);print('state:',d.get('state'));print('published:',d.get('published'));print('url:',d.get('ssl_url')or d.get('url'));print('created:',d.get('created_at'));print('files:',len(d.get('files',{})))"
+          if [ "$HTTP_CODE" != "200" ]; then echo "Deploy HTTP failed"; exit 1; fi
+          python3 -c "import json,sys;r=json.load(open('deploy-result.json'));d=r.get('deploy',r);sys.exit(0 if d.get('state')=='ready' else 1)" || { echo "Deploy state not ready"; exit 1; }
