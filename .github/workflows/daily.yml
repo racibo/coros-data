@@ -84,13 +84,4 @@ jobs:
             "https://api.netlify.com/api/v1/sites/${NETLIFY_SITE_ID}/deploys")
           echo "HTTP_CODE=$HTTP_CODE"
           cat deploy-result.json
-          python3 << 'PYEOF'
-import json
-r = json.load(open('deploy-result.json'))
-d = r.get('deploy', r)
-print('state:', d.get('state'))
-print('published:', d.get('published'))
-print('deploy_url:', d.get('ssl_url') or d.get('url'))
-print('created_at:', d.get('created_at'))
-print('files:', len(d.get('files', {})))
-PYEOF
+          python3 -c "import json,sys;r=json.load(open('deploy-result.json'));d=r.get('deploy',r);print('state:%s'%d.get('state'));print('published:%s'%d.get('published'));print('url:%s'%d.get('ssl_url')or d.get('url'));print('created:%s'%d.get('created_at'));print('files:%d'%len(d.get('files',{})))"
