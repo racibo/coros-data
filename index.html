@@ -10,6 +10,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+<script>Chart.register(ChartZoom);</script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -723,7 +725,9 @@ function calcAverages(data) {
 
 const chartOpts = {
   responsive:true,maintainAspectRatio:false,
-  plugins:{legend:{labels:{color:'#94a3b8',font:{family:"'Space Mono'",size:10}}}},
+  plugins:{legend:{labels:{color:'#94a3b8',font:{family:"'Space Mono'",size:10}}},
+    zoom:{zoom:{wheel:{enabled:true},pinch:{enabled:true},drag:{enabled:true,mode:'x'},mode:'x'},
+      pan:{enabled:true,mode:'x'}}},
   scales:{x:{ticks:{color:'#64748b',maxTicksLimit:15,font:{size:10}},grid:{color:'#1e293b'}},
            y:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#1e293b'}}}
 };
@@ -1050,7 +1054,7 @@ function renderWeightChart(data) {
         {label:'Średnia 14d',data:ma14,borderColor:'rgba(16,185,129,0.7)',borderWidth:1.2,pointRadius:0,spanGaps:true,tension:0.3,borderDash:[4,4],yAxisID:'y'},
         {label:'Średnia 30d',data:ma30,borderColor:'rgba(139,92,246,0.55)',borderWidth:1,pointRadius:0,spanGaps:true,tension:0.3,borderDash:[5,5],yAxisID:'y'},
         {label:'Średnia 90d',data:ma90,borderColor:'rgba(236,72,153,0.4)',borderWidth:0.8,pointRadius:0,spanGaps:true,tension:0.3,borderDash:[6,6],yAxisID:'y'},
-        {label:'Odch. BMI od 22',data:bmiDev,borderColor:'#ef4444',backgroundColor:'transparent',borderWidth:1,pointRadius:3,pointBackgroundColor:bmiDev.map(function(v){return v==null?'transparent':v>0?'#ef4444':'#10b981';}),spanGaps:true,tension:0.1,yAxisID:'y1'}
+        {label:'Odch. BMI od 22',data:bmiDev,type:'bar',backgroundColor:bmiDev.map(function(v){return v==null?'transparent':v>0?'rgba(239,68,68,0.65)':'rgba(16,185,129,0.65)';}),borderRadius:2,barPercentage:0.6,yAxisID:'y1',order:2}
       ]
     },
     options:{...chartOpts,
