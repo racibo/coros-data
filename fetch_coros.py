@@ -472,6 +472,8 @@ async def main():
         end = date.today()
         start = end - timedelta(days=120)
         sd, ed = start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
+        start_ts = int(datetime(start.year, start.month, start.day).timestamp())
+        end_ts = int(datetime(end.year, end.month, end.day, 23, 59, 59).timestamp())
         print(f"Pobieranie danych z Coros API: {sd} -> {ed}…")
 
 
@@ -681,14 +683,12 @@ async def main():
                     gs_map[ds]["hrv"] = rec.avg_sleep_hrv
 
         # Activities → distance/calories if not in Sheets, plus exercise names
-        act_start = int(sd) if isinstance(sd, str) and sd.isdigit() else 0
-        act_end = int(ed) if isinstance(ed, str) and ed.isdigit() else 99999999
         for act in activities:
             if not act.start_time:
                 continue
             try:
                 ts = int(act.start_time)
-                if ts < act_start or ts > act_end:
+                if ts < start_ts or ts > end_ts:
                     continue
                 dt = datetime.fromtimestamp(ts)
                 ds = dt.strftime("%Y-%m-%d")
