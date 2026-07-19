@@ -421,14 +421,15 @@ async def main():
             print("Dane z Google Sheets zostaną użyte bez wzbogacenia Coros.")
             auth = None
 
+    # Debug log file (may be empty if no Coros auth)
+    debug_log: list[str] = []
+
     if auth:
         end = date.today()
         start = end - timedelta(days=120)
         sd, ed = start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
         print(f"Pobieranie danych z Coros API: {sd} -> {ed}…")
 
-        # Debug log file
-        debug_log: list[str] = []
 
         def dbg(msg: str) -> None:
             print(msg)
