@@ -393,6 +393,48 @@ def calc_sleep_score(total_h: float | None, deep_min: float | None, rem_min: flo
     return round(dur + deep + rem)
 
 
+def _build_output(gs_map: dict, debug_log: list, verbose: bool = True) -> None:
+    output = []
+    for d in sorted(gs_map.keys()):
+        entry = gs_map[d]
+        enames = entry.get("exerciseNames")
+        if isinstance(enames, list):
+            entry["exerciseNames"] = list(set(enames))
+        elif enames is None:
+            entry["exerciseNames"] = []
+        for field in ("steps", "cal", "dist", "hrAvg", "hrMin", "hrMax",
+                       "deep", "rem", "light", "awake", "sleepH", "sleepScore",
+                       "hrv", "restingHr", "weight"):
+            if field not in entry:
+                entry[field] = None
+        if entry.get("sleepScore") is None and entry.get("sleepH") is not None:
+            entry["sleepScore"] = calc_sleep_score(entry["sleepH"], entry.get("deep"), entry.get("rem"))
+        if entry.get("dist") and not entry.get("distance_m"):
+            entry["distance_m"] = entry["dist"] * 1000
+        output.append(entry)
+    out_path = os.path.join(os.path.dirname(__file__), "data.json")
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump({
+            "_syncedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "days": output,
+        }, f, ensure_ascii=False, indent=2)
+    if verbose:
+        stats = {}
+        for d in output:
+            for k, v in d.items():
+                if k in ("date", "exerciseNames", "distance_m"):
+                    continue
+                if v is not None and v != 0 and (not isinstance(v, (int, float)) or v != 0):
+                    stats[k] = stats.get(k, 0) + 1
+        debug_path = os.path.join(os.path.dirname(__file__), "debug.log")
+        with open(debug_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(debug_log) + "\n")
+        print(f"\nOK - written {len(output)} dni -> {out_path}")
+        print("Pokrycie:")
+        for k in sorted(stats.keys()):
+            print(f"  {k}: {stats[k]}/{len(output)}")
+
+
 # ── main ──────────────────────────────────────────────────────────────────
 
 
@@ -421,8 +463,10 @@ async def main():
             print("Dane z Google Sheets zostaną użyte bez wzbogacenia Coros.")
             auth = None
 
-    # Debug log file (may be empty if no Coros auth)
     debug_log: list[str] = []
+
+    # Pre-write data.json with Google Sheets data as fallback
+    _build_output(gs_map, debug_log, verbose=False)
 
     if auth:
         end = date.today()
@@ -668,52 +712,8 @@ async def main():
     else:
         print("Pomijam Coros API (brak autoryzacji).")
 
-    # 5. Build output
-    output = []
-    for d in sorted(gs_map.keys()):
-        entry = gs_map[d]
-        # Normalize exercise names
-        enames = entry.get("exerciseNames")
-        if isinstance(enames, list):
-            entry["exerciseNames"] = list(set(enames))
-        elif enames is None:
-            entry["exerciseNames"] = []
-        # Ensure default fields exist
-        for field in ("steps", "cal", "dist", "hrAvg", "hrMin", "hrMax",
-                       "deep", "rem", "light", "awake", "sleepH", "sleepScore",
-                       "hrv", "restingHr", "weight"):
-            if field not in entry:
-                entry[field] = None
-        # Calculate sleepScore if missing but we have sleepH/deep/rem
-        if entry.get("sleepScore") is None and entry.get("sleepH") is not None:
-            entry["sleepScore"] = calc_sleep_score(entry["sleepH"], entry.get("deep"), entry.get("rem"))
-        # Fix distance_m if only dist exists
-        if entry.get("dist") and not entry.get("distance_m"):
-            entry["distance_m"] = entry["dist"] * 1000
-        output.append(entry)
-
-    out_path = os.path.join(os.path.dirname(__file__), "data.json")
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump({
-            "_syncedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "days": output,
-        }, f, ensure_ascii=False, indent=2)
-
-    # Stats
-    stats = {}
-    for d in output:
-        for k, v in d.items():
-            if k in ("date", "exerciseNames", "distance_m"):
-                continue
-            if v is not None and v != 0 and (not isinstance(v, (int, float)) or v != 0):
-                stats[k] = stats.get(k, 0) + 1
-    debug_path = os.path.join(os.path.dirname(__file__), "debug.log")
-    with open(debug_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(debug_log) + "\n")
-    print(f"\nOK - written {len(output)} dni -> {out_path}")
-    print("Pokrycie:")
-    for k in sorted(stats.keys()):
-        print(f"  {k}: {stats[k]}/{len(output)}")
+    # 5. Build output (final, with Coros data if available)
+    _build_output(gs_map, debug_log)
 
 
 if __name__ == "__main__":
