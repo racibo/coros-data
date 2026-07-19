@@ -681,11 +681,15 @@ async def main():
                     gs_map[ds]["hrv"] = rec.avg_sleep_hrv
 
         # Activities → distance/calories if not in Sheets, plus exercise names
+        act_start = int(sd) if isinstance(sd, str) and sd.isdigit() else 0
+        act_end = int(ed) if isinstance(ed, str) and ed.isdigit() else 99999999
         for act in activities:
             if not act.start_time:
                 continue
             try:
                 ts = int(act.start_time)
+                if ts < act_start or ts > act_end:
+                    continue
                 dt = datetime.fromtimestamp(ts)
                 ds = dt.strftime("%Y-%m-%d")
             except (ValueError, OSError):
