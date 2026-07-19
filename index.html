@@ -239,24 +239,6 @@ select,.btn{background:var(--surface2);border:1px solid var(--border2);color:var
   </div>
 </div>
 
-<!-- BODY TEMPERATURE -->
-<div class="section">
-  <div class="section-title" onclick="this.classList.toggle('show-def')">🌡️ Temperatura ciała<span class="def-icon">ⓘ</span>
-    <span class="def-text"><strong>Temperatura ciała</strong> – podstawowy parametr zdrowia. Norma ok. 36.5°C. Podwyższona może wskazywać na infekcję. Niższa = lepsza regeneracja (spada podczas snu).</span>
-  </div>
-  <div class="section-sub">Temperatura ciała (°C) – <span class="good">36.0–37.0</span> = norma · >37.5 = <span class="bad">stan podgorączkowy</span> · >38.0 = <span class="bad">gorączka</span></div>
-  <div class="chart-box"><canvas id="tempChart"></canvas></div>
-  <div class="explain" onclick="toggle(this)">❓ Jak czytać wykres temperatury &darr;</div>
-  <div class="explain-body">
-  <strong>Temperatura ciała</strong> – mierzona rano po przebudzeniu (najbardziej wiarygodna).<br>
-  • <strong>Niebieska linia</strong> – temperatura dzienna.<br>
-  • <strong>Zielona linia</strong> – średnia krocząca 7d.<br>
-  • <strong>Norma</strong>: 36.0–37.0°C. Powyżej 37.5°C = możliwa infekcja.<br>
-  • <strong>Brak danych</strong> = temperatura nie była mierzona. Dodajesz przez <strong>Google Sheets</strong> (kolumna <code>tempBody</code> w arkuszu Body).<br>
-  • <strong>Co jest dobre?</strong> Stabilna temperatura w normie. Nagły wzrost = organizm walczy z infekcją &rarr; gorsza regeneracja (niższe HRV, wyższe RHR).
-  </div>
-</div>
-
 <!-- CORRELATIONS -->
 <div class="section">
   <div class="section-title" onclick="this.classList.toggle('show-def')">🔍 Automatyczne korelacje – co wpływa na regenerację?<span class="def-icon">ⓘ</span>
@@ -557,15 +539,9 @@ function calcStatus(r,prev,data) {
   return{label:'Przetrenowanie / Stres',color:'#ef4444',emoji:'🤒',score:sc,reasons};
 }
 
-function computeMA(arr, n) {
-  return arr.map(function(_, i) {
-    var slice = arr.slice(Math.max(0, i - n + 1), i + 1).filter(function(v) { return v != null; });
-    return slice.length ? slice.reduce(function(a, b) { return a + b; }, 0) / slice.length : null;
-  });
-}
 function processData(raw, range) {
   let data = raw.filter(r=>r.date).sort((a,b)=>a.date.localeCompare(b.date));
-  const fields = ['steps','cal','dist','hrAvg','hrMin','hrMax','deep','rem','light','awake','sleepH','sleepScore','hrv','restingHr','weight','tempBody','trainingLoad','trainingLoadRatio','ati','cti','tib','moonPhase','moonLabel','moonIllum'];
+  const fields = ['steps','cal','dist','hrAvg','hrMin','hrMax','deep','rem','light','awake','sleepH','sleepScore','hrv','restingHr','weight','trainingLoad','trainingLoadRatio','ati','cti','tib','moonPhase','moonLabel','moonIllum'];
   data.forEach(r=>{fields.forEach(f=>{if(!(f in r))r[f]=null;});if(!r.exerciseNames)r.exerciseNames=[];});
   // moon phase
   data.forEach(function(r){ var mp = calcMoonPhase(r.date); r.moonPhase = mp.phase; r.moonLabel = mp.label; r.moonIllum = mp.illumination; });
@@ -1044,51 +1020,6 @@ function renderActivityChart(data) {
   });
 }
 
-function renderTempChart(data) {
-  var ctx=document.getElementById('tempChart');
-  if(!ctx) return null;
-  var t=data.map(function(r){return r.tempBody;});
-  var anyData = t.some(function(v){return v!=null;});
-  if(!anyData){ctx.style.display='none';return null;}
-  ctx.style.display='block';
-  var labels=data.map(function(r){return r.date.slice(5);});
-  var ma7=computeMA(t,7);
-  var allT = t.filter(function(v){return v!=null;});
-  var yMin = allT.length?Math.floor(Math.min.apply(null,allT)-0.5):35;
-  var yMax = allT.length?Math.ceil(Math.max.apply(null,allT)+0.5):38.5;
-  makeChart(ctx,{
-    type:'line',
-    data:{
-      labels:labels,
-      datasets:[
-        {label:'Temperatura ciała (°C)',data:t,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.08)',fill:true,pointRadius:4,pointBackgroundColor:t.map(function(v){return v==null?'transparent':'#3b82f6';}),borderWidth:2,spanGaps:true,tension:0.1},
-        {label:'Średnia 7d',data:ma7,borderColor:'rgba(16,185,129,0.8)',borderWidth:1.5,pointRadius:0,spanGaps:true,tension:0.3,borderDash:[3,3]}
-      ]
-    },
-    options:{...chartOpts,
-      scales:{y:{...chartOpts.scales.y,title:{display:true,text:'°C',color:'#94a3b8',font:{size:10}},min:yMin,max:yMax}},
-      plugins:{...chartOpts.plugins,
-        tooltip:{callbacks:{
-          title:function(ctx){return data[ctx[0].dataIndex].date||'';},
-          label:function(ctx){
-            if(ctx.raw==null)return '';
-            var r=data[ctx.dataIndex];
-            var txt=ctx.dataset.label+': '+ctx.raw.toFixed(1)+'°C';
-            if(r.tempBody!=null&&ctx.dataIndex>0){
-              var prev=data[ctx.dataIndex-1].tempBody;
-              if(prev!=null){
-                var chg=Math.round((r.tempBody-prev)*10)/10;
-                txt+=' ('+(chg>0?'+':'')+chg.toFixed(1)+'°)';
-              }
-            }
-            return txt;
-          }
-        }}
-      }
-    },
-    plugins:[]
-  });
-}
 function renderWeightChart(data) {
   var ctx=document.getElementById('weightChart');
   var w=data.map(function(r){return r.weight;});
@@ -1510,7 +1441,6 @@ function render(range) {
   try{charts.loadChart=renderLoadChart(data);}catch(e){console.error('loadChart',e);}
   try{charts.activityChart=renderActivityChart(data);}catch(e){console.error('activityChart',e);}
   try{charts.weightChart=renderWeightChart(data);}catch(e){console.error('weightChart',e);}
-  try{renderTempChart(data);}catch(e){console.error('tempChart',e);}
   try{renderAverages(data);}catch(e){console.error('averages',e);}
   try{renderCorrelations(data);}catch(e){console.error('correlations',e);}
   try{renderDayProfiles(data,currentRange);}catch(e){console.error('dayProfiles',e);}
