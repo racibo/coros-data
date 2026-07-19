@@ -356,6 +356,9 @@ async def load_google_sheets() -> dict[str, dict]:
         w = to_n(get_val(r, "weight") or get_val(r, "waga"))
         if w:
             map_[k]["weight"] = w
+        tb = to_n(get_val(r, "tempBody") or get_val(r, "temp") or get_val(r, "temperature") or get_val(r, "temperatura"))
+        if tb is not None:
+            map_[k]["tempBody"] = tb
 
     # Moon phase for every day
     for ds in list(map_.keys()):
@@ -421,14 +424,15 @@ async def main():
             print("Dane z Google Sheets zostaną użyte bez wzbogacenia Coros.")
             auth = None
 
+    # Debug log file (may be empty if no Coros auth)
+    debug_log: list[str] = []
+
     if auth:
         end = date.today()
         start = end - timedelta(days=120)
         sd, ed = start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
         print(f"Pobieranie danych z Coros API: {sd} -> {ed}…")
 
-        # Debug log file
-        debug_log: list[str] = []
 
         def dbg(msg: str) -> None:
             print(msg)
@@ -680,7 +684,7 @@ async def main():
         # Ensure default fields exist
         for field in ("steps", "cal", "dist", "hrAvg", "hrMin", "hrMax",
                        "deep", "rem", "light", "awake", "sleepH", "sleepScore",
-                       "hrv", "restingHr", "weight"):
+                       "hrv", "restingHr", "weight", "tempBody"):
             if field not in entry:
                 entry[field] = None
         # Calculate sleepScore if missing but we have sleepH/deep/rem
