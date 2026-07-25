@@ -14,7 +14,7 @@ import csv
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 STRAVA_TYPES = {
     "Ride", "EBikeRide", "MountainBikeRide", "GravelRide",
@@ -137,6 +137,16 @@ def main():
         days = raw
     day_map: dict[str, dict] = {d["date"]: d for d in days}
 
+    # Determine date range from existing data (set by fetch_coros.py, typically 120 days)
+    existing_dates = [d["date"] for d in days if "date" in d]
+    if existing_dates:
+        min_date = min(existing_dates)
+        max_date = max(existing_dates)
+    else:
+        today = datetime.now(timezone.utc).date()
+        min_date = (today - timedelta(days=120)).strftime("%Y-%m-%d")
+        max_date = today.strftime("%Y-%m-%d")
+
     stats = {"added_names": 0, "added_dist": 0, "added_hr": 0}
     bike_activities = 0
 
@@ -155,6 +165,10 @@ def main():
         # Get date
         ds = parse_date_local(act)
         if not ds:
+            continue
+
+        # Skip activities outside the existing date range
+        if ds < min_date or ds > max_date:
             continue
 
         bike_activities += 1
@@ -202,7 +216,7 @@ def main():
             stats["added_hr"] += 1
 
     # Stats
-    print(f"\nZnaleziono {bike_activities} aktywności rowerowych/e-bike w danych Strava.")
+    print(f"\nZnaleziono {bike_activities} aktywności rowerowych/e-bike w danych Strava (zakres: {min_date}..{max_date}).")
     print(f"Dodano/uzupełniono:")
     print(f"  nazwy aktywności: {stats['added_names']} dni")
     print(f"  dystans:          {stats['added_dist']} dni")
