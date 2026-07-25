@@ -352,7 +352,7 @@ function gvizJSONP(gid) {
     var tid = setTimeout(function(){
       delete window._gvizCB;
       resolve(null); // timeout → skip sheet
-    }, 5000);
+    }, 15000);
     window._gvizCB = function(data) {
       clearTimeout(tid);
       delete window._gvizCB;
@@ -395,10 +395,11 @@ function gvizToRows(gid, fields) {
 }
 async function loadGoogleSheetsJSONP() {
   // Sequential → each call sets its own setResponse handler, no race
-  const actR = await gvizToRows(SHEETS.activity,["date","steps","distance","calories","exercise","source"]);
-  const slpR = await gvizToRows(SHEETS.sleep,["date","deep","rem","light","source"]);
-  const vitR = await gvizToRows(SHEETS.vitals,["date","min","max","avg","hrv","rhr","source"]);
-  const bodR = await gvizToRows(SHEETS.body,["date","weight"]);
+  let actR=[], slpR=[], vitR=[], bodR=[];
+  try { actR = await gvizToRows(SHEETS.activity,["date","steps","distance","calories","exercise","source"]); } catch(e){ console.warn('activity sheet failed',e); }
+  try { slpR = await gvizToRows(SHEETS.sleep,["date","deep","rem","light","source"]); } catch(e){ console.warn('sleep sheet failed',e); }
+  try { vitR = await gvizToRows(SHEETS.vitals,["date","min","max","avg","variability avg","resting heart rate avg","source"]); } catch(e){ console.warn('vitals sheet failed',e); }
+  try { bodR = await gvizToRows(SHEETS.body,["date","weight"]); } catch(e){ console.warn('body sheet failed',e); }
   const map={};
   const ensure=k=>{if(!map[k])map[k]={date:k};return k;};
   actR.forEach(r=>{
@@ -425,8 +426,8 @@ async function loadGoogleSheetsJSONP() {
     if(!r.source||!r.source.toLowerCase().includes("healthsync"))return;
     const k=pDate(r.date)?.toISOString().slice(0,10);if(!k)return;
     ensure(k);
-    if(toN(r.hrv)!=null)map[k].hrv=toN(r.hrv);
-    if(toN(r.rhr)!=null)map[k].restingHr=toN(r.rhr);
+    if(toN(r["variability avg"])!=null)map[k].hrv=toN(r["variability avg"]);
+    if(toN(r["resting heart rate avg"])!=null)map[k].restingHr=toN(r["resting heart rate avg"]);
   });
   bodR.forEach(r=>{
     const k=ensure(pDate(r.date||r.time)?.toISOString().slice(0,10));
