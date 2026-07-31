@@ -438,30 +438,306 @@ def _build_output(gs_map: dict, debug_log: list, verbose: bool = True) -> None:
 # ── main ──────────────────────────────────────────────────────────────────
 
 
-async def main():
-    print("Pobieranie danych z Google Sheets…")
-    gs_map = await load_google_sheets()
-    print(f"  Google Sheets: {len(gs_map)} dni")
+async def _fresh_login() -> StoredAuth | None:
+    email = os.environ.get("COROS_EMAIL")
+    password = os.environ.get("COROS_PASSWORD")
+    region = os.environ.get("COROS_REGION", "eu")
+    if email and password:
+        print("Logowanie do Coros…")
+        auth = await login(email, password, region, skip_mobile=True)
+        _save_auth_cache(auth, AUTH_CACHE_PATH)
+        return auth
+    print("Brak autoryzacji Coros. Użyj: coros-mcp auth")
+    print("Dane z Google Sheets zostaną użyte bez wzbogacenia Coros.")
+    return None
 
+
+async def _acquire_auth() -> StoredAuth | None:
     # Coros API – try cache first to avoid daily re-login
     auth = get_stored_auth()
     if not auth:
         auth = _load_auth_cache(AUTH_CACHE_PATH)
         if auth:
             print("  auth z cache (pomijam login)")
-
     if not auth:
-        email = os.environ.get("COROS_EMAIL")
-        password = os.environ.get("COROS_PASSWORD")
-        region = os.environ.get("COROS_REGION", "eu")
-        if email and password:
-            print("Logowanie do Coros…")
-            auth = await login(email, password, region, skip_mobile=True)
-            _save_auth_cache(auth, AUTH_CACHE_PATH)
-        else:
-            print("Brak autoryzacji Coros. Użyj: coros-mcp auth")
-            print("Dane z Google Sheets zostaną użyte bez wzbogacenia Coros.")
-            auth = None
+        auth = await _fresh_login()
+    return auth
+
+
+async def _validate_token(auth: StoredAuth) -> bool:
+    """Lightweight check that the cached access token still works."""
+    try:
+        headers = _auth_headers(auth)
+        base = _base_url(auth.region)
+        today = date.today().strftime("%Y%m%d")
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(
+                base + ENDPOINTS["analyse_detail"],
+                params={"startDay": today, "endDay": today},
+                headers=headers,
+            )
+        if resp.status_code != 200:
+            return False
+        body = resp.json()
+        return body.get("result") == "0000"
+    except Exception:
+        return False
+
+
+async def _fetch_coros_data(auth: StoredAuth, gs_map: dict, debug_log: list[str]) -> None:
+    """Fetch Coros API data and merge into gs_map. Raises on invalid token."""
+    end = date.today()
+    start = end - timedelta(days=120)
+    sd, ed = start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
+    start_ts = int(datetime(start.year, start.month, start.day).timestamp())
+    end_ts = int(datetime(end.year, end.month, end.day, 23, 59, 59).timestamp())
+    print(f"Pobieranie danych z Coros API: {sd} -> {ed}…")
+
+
+    def dbg(msg: str) -> None:
+        print(msg)
+        debug_log.append(msg)
+
+    # Only use cached mobile token – never do a full login (would invalidate phone session)
+    mobile_base = MOBILE_BASE_URLS.get(auth.region, MOBILE_BASE_URLS["eu"])
+    has_mobile = auth.mobile_access_token is not None
+    if not has_mobile:
+        # Try refreshing from cached payload without re-entering credentials
+        if auth.mobile_login_payload:
+            try:
+                from coros_api import _refresh_mobile_token
+                has_mobile = await _refresh_mobile_token(auth)
+            except Exception:
+                pass
+    if not has_mobile:
+        dbg("  WARN: no mobile token (phone might not be logged in). Skipping steps/HR/RHR.")
+
+    async def fetch_mobile_dt(dt: int) -> list[dict]:
+        if not has_mobile:
+            return []
+        url = mobile_base + ENDPOINTS["sleep"]
+        payload = {
+            "allDeviceSleep": 0,
+            "dataType": [dt],
+            "dataVersion": 0,
+            "startTime": int(sd),
+            "endTime": int(ed),
+            "statisticType": 1,
+        }
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                url,
+                params={"accessToken": auth.mobile_access_token},
+                json=payload,
+                headers={"Content-Type": "application/json", "accesstoken": auth.mobile_access_token},
+            )
+            if resp.status_code != 200:
+                dbg(f"  WARN: mobile dt={dt} status {resp.status_code}")
+                return []
+            body = resp.json()
+            if body.get("result") != "0000":
+                dbg(f"  mobile dt={dt} error: {body.get('message','?')}")
+                return []
+            data_node = body.get("data")
+            if data_node is None:
+                daylist = []
+            else:
+                stat_data = data_node.get("statisticData") if isinstance(data_node, dict) else None
+                daylist = stat_data.get("dayDataList", []) if isinstance(stat_data, dict) else []
+            if daylist:
+                sample_keys = list(daylist[-1].keys())
+                dbg(f"  mobile dt={dt} ({MOBILE_DATA_TYPES[dt]}): {len(daylist)} dni, last item keys={sample_keys}")
+                if dt in (3, 4):
+                    dbg(f"    last item: {json.dumps(daylist[-1], ensure_ascii=False)}")
+            else:
+                dbg(f"  mobile dt={dt} ({MOBILE_DATA_TYPES[dt]}): 0 dni – raw body dump:")
+                safe_body = {k: v for k, v in body.items() if k != "data"}
+                dbg(f"    top keys: {list(body.keys())}")
+                dbg(f"    data type: {type(data_node).__name__} value: {json.dumps(data_node, ensure_ascii=False)[:2000] if data_node is not None else 'null'}")
+                for key_path in [["data", "dayDataList"], ["data", "statisticData"], ["data", "list"], ["dayDataList"]]:
+                    cursor = body
+                    found = True
+                    for k in key_path:
+                        if isinstance(cursor, dict) and k in cursor:
+                            cursor = cursor[k]
+                        else:
+                            found = False
+                            break
+                    if found and isinstance(cursor, list):
+                        dbg(f"    found list at {' > '.join(key_path)}: {len(cursor)} items")
+            return daylist
+
+    mobile_results = await asyncio.gather(*[fetch_mobile_dt(dt) for dt in MOBILE_DATA_TYPES])
+    mobile_by_day: dict[str, dict] = {}
+    for dt, daylist in zip(MOBILE_DATA_TYPES.keys(), mobile_results):
+        key = MOBILE_DATA_TYPES[dt]
+        for item in daylist:
+            hd = item.get("happenDay")
+            if not hd:
+                continue
+            d = str(hd)
+            ds = f"{d[:4]}-{d[4:6]}-{d[6:]}"
+            mobile_by_day.setdefault(ds, {})[key] = item
+    dbg(f"  mobile daily: {len(mobile_by_day)} dni (e.g. {list(mobile_by_day.keys())[:3]}...)")
+    if mobile_by_day:
+        sample_dates = sorted(mobile_by_day.keys())[-3:]
+        for ds in sample_dates:
+            debug_sample = mobile_by_day[ds]
+            dbg(f"    DEBUG mobile[{ds}]: dataTypes={list(debug_sample.keys())}")
+            for dt_key, item in debug_sample.items():
+                top_keys = list(item.keys())[:10]
+                dbg(f"      {dt_key} keys={top_keys}")
+                if dt_key == "step":
+                    dbg(f"        step={item.get('step')}, total={item.get('total')}")
+                elif dt_key == "heartRateData":
+                    inner = item.get("heartRateData", {})
+                    if isinstance(inner, dict):
+                        dbg(f"        inner keys={list(inner.keys())[:6]}")
+                        dbg(f"        avg={inner.get('avgHeartRate')}, max={inner.get('maxHeartRate')}, min={inner.get('minHeartRate')}")
+                    else:
+                        dbg(f"        inner type={type(inner).__name__} value={inner}")
+                elif dt_key == "rhr":
+                    dbg(f"        rhr={item.get('rhr')}")
+                elif dt_key == "calorie":
+                    dbg(f"        calorie={item.get('calorie')}")
+
+    raw_days, sleep_recs, hrv_recs, act_result = await asyncio.gather(
+        fetch_raw_daily(auth, sd, ed),
+        fetch_sleep(auth, sd, ed),
+        fetch_hrv(auth),
+        fetch_activities(auth, sd, ed, size=200),
+    )
+    activities, total = act_result
+    print(f"  dayList: {len(raw_days)}d, sleep: {len(sleep_recs)}d, hrv: {len(hrv_recs)}d, activities: {total}")
+    if raw_days:
+        dbg(f"  raw_days[0] keys ({len(raw_days[0])}): {sorted(raw_days[0].keys())}")
+        dbg(f"  raw_days[0] bodyWeight={raw_days[0].get('bodyWeight')}, weight={raw_days[0].get('weight')}, bodyWeightKg={raw_days[0].get('bodyWeightKg')}")
+
+    # Merge Coros data into Google Sheets map
+    for item in raw_days:
+        d = str(item.get("happenDay") or "")
+        if len(d) < 8:
+            continue
+        ds = f"{d[:4]}-{d[4:6]}-{d[6:]}"
+        if ds not in gs_map:
+            gs_map[ds] = {"date": ds}
+        entry = gs_map[ds]
+        if entry.get("hrv") is None and item.get("avgSleepHrv") is not None:
+            entry["hrv"] = item.get("avgSleepHrv")
+        if entry.get("restingHr") is None and item.get("rhr") is not None:
+            entry["restingHr"] = item.get("rhr")
+        # Training & recovery metrics
+        for k in ("trainingLoad", "trainingLoadRatio", "vo2max", "lthr", "performance", "tiredRateNew"):
+            v = item.get(k)
+            if v is not None:
+                entry[k] = v
+        for k in ("ati", "cti", "tib", "sleepHrvBase"):
+            v = item.get(k)
+            if v is not None:
+                entry[k] = v
+        # Body weight (if available from Coros API)
+        for wk in ("bodyWeight", "weight", "bodyWeightKg"):
+            v = item.get(wk)
+            if v is not None:
+                entry["weight"] = v
+                break
+
+    # Merge mobile daily data (steps, cals, HR, RHR)
+    for ds, m in mobile_by_day.items():
+        if ds not in gs_map:
+            gs_map[ds] = {"date": ds}
+        e = gs_map[ds]
+        # Steps (dataType 3 → field "step")
+        step_item = m.get("step", {})
+        step_val = step_item.get("step") or step_item.get("total") or step_item.get("steps")
+        if e.get("steps") is None and step_val is not None:
+            e["steps"] = step_val
+        # Calories (dataType 1 → field "calorie")
+        cal_item = m.get("calorie", {})
+        cal_val = cal_item.get("calorie") or cal_item.get("total") or cal_item.get("calories")
+        if e.get("cal") is None and cal_val is not None:
+            e["cal"] = cal_val
+        # HR (dataType 4 → field "heartRateData")
+        hr_item = m.get("heartRateData", {})
+        hr_inner = hr_item.get("heartRateData") or hr_item
+        if e.get("hrAvg") is None and hr_inner.get("avgHeartRate") is not None:
+            e["hrAvg"] = hr_inner["avgHeartRate"]
+        if e.get("hrMax") is None and hr_inner.get("maxHeartRate") is not None:
+            e["hrMax"] = hr_inner["maxHeartRate"]
+        if e.get("hrMin") is None and hr_inner.get("minHeartRate") is not None:
+            e["hrMin"] = hr_inner["minHeartRate"]
+        # RHR (dataType 6 → field "rhr")
+        rhr_item = m.get("rhr", {})
+        rhr_val = rhr_item.get("rhr") or rhr_item.get("restingHr") or rhr_item.get("value")
+        if e.get("restingHr") is None and rhr_val is not None:
+            e["restingHr"] = rhr_val
+
+    print(f"  mobile merged. sample: ds=2026-07-09 -> {gs_map.get('2026-07-09', {}).get('steps')}, {gs_map.get('2026-07-09', {}).get('hrAvg')}")
+
+    # Sleep data (Coros sleep is more detailed than Google Sheets)
+    for rec in sleep_recs:
+        ds = norm_date(rec.date)
+        if ds not in gs_map:
+            gs_map[ds] = {"date": ds}
+        entry = gs_map[ds]
+        if rec.phases:
+            entry["deep"] = rec.phases.deep_minutes
+            entry["rem"] = rec.phases.rem_minutes
+            entry["light"] = rec.phases.light_minutes
+            entry["awake"] = rec.phases.awake_minutes
+        if rec.total_duration_minutes:
+            entry["sleepH"] = round(rec.total_duration_minutes / 60, 1)
+        if rec.min_hr is not None:
+            entry["hrMin"] = rec.min_hr
+        # Calculate sleep score from phases
+        entry["sleepScore"] = calc_sleep_score(entry.get("sleepH"), entry.get("deep"), entry.get("rem"))
+
+    # HRV supplement
+    for rec in hrv_recs:
+        ds = norm_date(rec.date)
+        if ds in gs_map and rec.avg_sleep_hrv is not None:
+            if gs_map[ds].get("hrv") is None:
+                gs_map[ds]["hrv"] = rec.avg_sleep_hrv
+
+    # Activities → distance/calories if not in Sheets, plus exercise names
+    for act in activities:
+        if not act.start_time:
+            continue
+        try:
+            ts = int(act.start_time)
+            if ts < start_ts or ts > end_ts:
+                continue
+            dt = datetime.fromtimestamp(ts)
+            ds = dt.strftime("%Y-%m-%d")
+        except (ValueError, OSError):
+            continue
+        if ds not in gs_map:
+            gs_map[ds] = {"date": ds}
+        entry = gs_map[ds]
+        sport = (act.sport_name or "").lower()
+        if sport:
+            entry.setdefault("exerciseNames", [])
+            if sport not in entry["exerciseNames"]:
+                entry["exerciseNames"].append(sport)
+        if act.distance_meters:
+            existing = entry.get("distance_m") or 0
+            entry["distance_m"] = existing + act.distance_meters
+            entry["dist"] = round(entry["distance_m"] / 1000, 2)
+        if act.calories is not None:
+            existing = entry.get("cal") or 0
+            entry["cal"] = existing + act.calories
+
+    # Update cache with refreshed mobile token
+    if AUTH_CACHE_PATH:
+        _save_auth_cache(auth, AUTH_CACHE_PATH)
+
+
+async def main():
+    print("Pobieranie danych z Google Sheets…")
+    gs_map = await load_google_sheets()
+    print(f"  Google Sheets: {len(gs_map)} dni")
+
+    auth = await _acquire_auth()
 
     debug_log: list[str] = []
 
@@ -469,254 +745,24 @@ async def main():
     _build_output(gs_map, debug_log, verbose=False)
 
     if auth:
-        end = date.today()
-        start = end - timedelta(days=120)
-        sd, ed = start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
-        start_ts = int(datetime(start.year, start.month, start.day).timestamp())
-        end_ts = int(datetime(end.year, end.month, end.day, 23, 59, 59).timestamp())
-        print(f"Pobieranie danych z Coros API: {sd} -> {ed}…")
-
-
-        def dbg(msg: str) -> None:
-            print(msg)
-            debug_log.append(msg)
-
-        # Only use cached mobile token – never do a full login (would invalidate phone session)
-        mobile_base = MOBILE_BASE_URLS.get(auth.region, MOBILE_BASE_URLS["eu"])
-        has_mobile = auth.mobile_access_token is not None
-        if not has_mobile:
-            # Try refreshing from cached payload without re-entering credentials
-            if auth.mobile_login_payload:
-                try:
-                    from coros_api import _refresh_mobile_token
-                    has_mobile = await _refresh_mobile_token(auth)
-                except Exception:
-                    pass
-        if not has_mobile:
-            dbg("  WARN: no mobile token (phone might not be logged in). Skipping steps/HR/RHR.")
-
-        async def fetch_mobile_dt(dt: int) -> list[dict]:
-            if not has_mobile:
-                return []
-            url = mobile_base + ENDPOINTS["sleep"]
-            payload = {
-                "allDeviceSleep": 0,
-                "dataType": [dt],
-                "dataVersion": 0,
-                "startTime": int(sd),
-                "endTime": int(ed),
-                "statisticType": 1,
-            }
-            async with httpx.AsyncClient(timeout=30) as client:
-                resp = await client.post(
-                    url,
-                    params={"accessToken": auth.mobile_access_token},
-                    json=payload,
-                    headers={"Content-Type": "application/json", "accesstoken": auth.mobile_access_token},
-                )
-                if resp.status_code != 200:
-                    dbg(f"  WARN: mobile dt={dt} status {resp.status_code}")
-                    return []
-                body = resp.json()
-                if body.get("result") != "0000":
-                    dbg(f"  mobile dt={dt} error: {body.get('message','?')}")
-                    return []
-                data_node = body.get("data")
-                if data_node is None:
-                    daylist = []
-                else:
-                    stat_data = data_node.get("statisticData") if isinstance(data_node, dict) else None
-                    daylist = stat_data.get("dayDataList", []) if isinstance(stat_data, dict) else []
-                if daylist:
-                    sample_keys = list(daylist[-1].keys())
-                    dbg(f"  mobile dt={dt} ({MOBILE_DATA_TYPES[dt]}): {len(daylist)} dni, last item keys={sample_keys}")
-                    if dt in (3, 4):
-                        dbg(f"    last item: {json.dumps(daylist[-1], ensure_ascii=False)}")
-                else:
-                    dbg(f"  mobile dt={dt} ({MOBILE_DATA_TYPES[dt]}): 0 dni – raw body dump:")
-                    safe_body = {k: v for k, v in body.items() if k != "data"}
-                    dbg(f"    top keys: {list(body.keys())}")
-                    dbg(f"    data type: {type(data_node).__name__} value: {json.dumps(data_node, ensure_ascii=False)[:2000] if data_node is not None else 'null'}")
-                    for key_path in [["data", "dayDataList"], ["data", "statisticData"], ["data", "list"], ["dayDataList"]]:
-                        cursor = body
-                        found = True
-                        for k in key_path:
-                            if isinstance(cursor, dict) and k in cursor:
-                                cursor = cursor[k]
-                            else:
-                                found = False
-                                break
-                        if found and isinstance(cursor, list):
-                            dbg(f"    found list at {' > '.join(key_path)}: {len(cursor)} items")
-                return daylist
-
-        mobile_results = await asyncio.gather(*[fetch_mobile_dt(dt) for dt in MOBILE_DATA_TYPES])
-        mobile_by_day: dict[str, dict] = {}
-        for dt, daylist in zip(MOBILE_DATA_TYPES.keys(), mobile_results):
-            key = MOBILE_DATA_TYPES[dt]
-            for item in daylist:
-                hd = item.get("happenDay")
-                if not hd:
-                    continue
-                d = str(hd)
-                ds = f"{d[:4]}-{d[4:6]}-{d[6:]}"
-                mobile_by_day.setdefault(ds, {})[key] = item
-        dbg(f"  mobile daily: {len(mobile_by_day)} dni (e.g. {list(mobile_by_day.keys())[:3]}...)")
-        if mobile_by_day:
-            sample_dates = sorted(mobile_by_day.keys())[-3:]
-            for ds in sample_dates:
-                debug_sample = mobile_by_day[ds]
-                dbg(f"    DEBUG mobile[{ds}]: dataTypes={list(debug_sample.keys())}")
-                for dt_key, item in debug_sample.items():
-                    top_keys = list(item.keys())[:10]
-                    dbg(f"      {dt_key} keys={top_keys}")
-                    if dt_key == "step":
-                        dbg(f"        step={item.get('step')}, total={item.get('total')}")
-                    elif dt_key == "heartRateData":
-                        inner = item.get("heartRateData", {})
-                        if isinstance(inner, dict):
-                            dbg(f"        inner keys={list(inner.keys())[:6]}")
-                            dbg(f"        avg={inner.get('avgHeartRate')}, max={inner.get('maxHeartRate')}, min={inner.get('minHeartRate')}")
-                        else:
-                            dbg(f"        inner type={type(inner).__name__} value={inner}")
-                    elif dt_key == "rhr":
-                        dbg(f"        rhr={item.get('rhr')}")
-                    elif dt_key == "calorie":
-                        dbg(f"        calorie={item.get('calorie')}")
-
-        raw_days, sleep_recs, hrv_recs, act_result = await asyncio.gather(
-            fetch_raw_daily(auth, sd, ed),
-            fetch_sleep(auth, sd, ed),
-            fetch_hrv(auth),
-            fetch_activities(auth, sd, ed, size=200),
-        )
-        activities, total = act_result
-        print(f"  dayList: {len(raw_days)}d, sleep: {len(sleep_recs)}d, hrv: {len(hrv_recs)}d, activities: {total}")
-        if raw_days:
-            dbg(f"  raw_days[0] keys ({len(raw_days[0])}): {sorted(raw_days[0].keys())}")
-            dbg(f"  raw_days[0] bodyWeight={raw_days[0].get('bodyWeight')}, weight={raw_days[0].get('weight')}, bodyWeightKg={raw_days[0].get('bodyWeightKg')}")
-
-        # Merge Coros data into Google Sheets map
-        for item in raw_days:
-            d = str(item.get("happenDay") or "")
-            if len(d) < 8:
-                continue
-            ds = f"{d[:4]}-{d[4:6]}-{d[6:]}"
-            if ds not in gs_map:
-                gs_map[ds] = {"date": ds}
-            entry = gs_map[ds]
-            if entry.get("hrv") is None and item.get("avgSleepHrv") is not None:
-                entry["hrv"] = item.get("avgSleepHrv")
-            if entry.get("restingHr") is None and item.get("rhr") is not None:
-                entry["restingHr"] = item.get("rhr")
-            # Training & recovery metrics
-            for k in ("trainingLoad", "trainingLoadRatio", "vo2max", "lthr", "performance", "tiredRateNew"):
-                v = item.get(k)
-                if v is not None:
-                    entry[k] = v
-            for k in ("ati", "cti", "tib", "sleepHrvBase"):
-                v = item.get(k)
-                if v is not None:
-                    entry[k] = v
-            # Body weight (if available from Coros API)
-            for wk in ("bodyWeight", "weight", "bodyWeightKg"):
-                v = item.get(wk)
-                if v is not None:
-                    entry["weight"] = v
-                    break
-
-        # Merge mobile daily data (steps, cals, HR, RHR)
-        for ds, m in mobile_by_day.items():
-            if ds not in gs_map:
-                gs_map[ds] = {"date": ds}
-            e = gs_map[ds]
-            # Steps (dataType 3 → field "step")
-            step_item = m.get("step", {})
-            step_val = step_item.get("step") or step_item.get("total") or step_item.get("steps")
-            if e.get("steps") is None and step_val is not None:
-                e["steps"] = step_val
-            # Calories (dataType 1 → field "calorie")
-            cal_item = m.get("calorie", {})
-            cal_val = cal_item.get("calorie") or cal_item.get("total") or cal_item.get("calories")
-            if e.get("cal") is None and cal_val is not None:
-                e["cal"] = cal_val
-            # HR (dataType 4 → field "heartRateData")
-            hr_item = m.get("heartRateData", {})
-            hr_inner = hr_item.get("heartRateData") or hr_item
-            if e.get("hrAvg") is None and hr_inner.get("avgHeartRate") is not None:
-                e["hrAvg"] = hr_inner["avgHeartRate"]
-            if e.get("hrMax") is None and hr_inner.get("maxHeartRate") is not None:
-                e["hrMax"] = hr_inner["maxHeartRate"]
-            if e.get("hrMin") is None and hr_inner.get("minHeartRate") is not None:
-                e["hrMin"] = hr_inner["minHeartRate"]
-            # RHR (dataType 6 → field "rhr")
-            rhr_item = m.get("rhr", {})
-            rhr_val = rhr_item.get("rhr") or rhr_item.get("restingHr") or rhr_item.get("value")
-            if e.get("restingHr") is None and rhr_val is not None:
-                e["restingHr"] = rhr_val
-
-        print(f"  mobile merged. sample: ds=2026-07-09 -> {gs_map.get('2026-07-09', {}).get('steps')}, {gs_map.get('2026-07-09', {}).get('hrAvg')}")
-
-        # Sleep data (Coros sleep is more detailed than Google Sheets)
-        for rec in sleep_recs:
-            ds = norm_date(rec.date)
-            if ds not in gs_map:
-                gs_map[ds] = {"date": ds}
-            entry = gs_map[ds]
-            if rec.phases:
-                entry["deep"] = rec.phases.deep_minutes
-                entry["rem"] = rec.phases.rem_minutes
-                entry["light"] = rec.phases.light_minutes
-                entry["awake"] = rec.phases.awake_minutes
-            if rec.total_duration_minutes:
-                entry["sleepH"] = round(rec.total_duration_minutes / 60, 1)
-            if rec.min_hr is not None:
-                entry["hrMin"] = rec.min_hr
-            # Calculate sleep score from phases
-            entry["sleepScore"] = calc_sleep_score(entry.get("sleepH"), entry.get("deep"), entry.get("rem"))
-
-        # HRV supplement
-        for rec in hrv_recs:
-            ds = norm_date(rec.date)
-            if ds in gs_map and rec.avg_sleep_hrv is not None:
-                if gs_map[ds].get("hrv") is None:
-                    gs_map[ds]["hrv"] = rec.avg_sleep_hrv
-
-        # Activities → distance/calories if not in Sheets, plus exercise names
-        for act in activities:
-            if not act.start_time:
-                continue
-            try:
-                ts = int(act.start_time)
-                if ts < start_ts or ts > end_ts:
-                    continue
-                dt = datetime.fromtimestamp(ts)
-                ds = dt.strftime("%Y-%m-%d")
-            except (ValueError, OSError):
-                continue
-            if ds not in gs_map:
-                gs_map[ds] = {"date": ds}
-            entry = gs_map[ds]
-            sport = (act.sport_name or "").lower()
-            if sport:
-                entry.setdefault("exerciseNames", [])
-                if sport not in entry["exerciseNames"]:
-                    entry["exerciseNames"].append(sport)
-            if act.distance_meters:
-                existing = entry.get("distance_m") or 0
-                entry["distance_m"] = existing + act.distance_meters
-                entry["dist"] = round(entry["distance_m"] / 1000, 2)
-            if act.calories is not None:
-                existing = entry.get("cal") or 0
-                entry["cal"] = existing + act.calories
-
-        # Update cache with refreshed mobile token
-        if AUTH_CACHE_PATH:
-            _save_auth_cache(auth, AUTH_CACHE_PATH)
+        if not await _validate_token(auth):
+            print("  Token Coros nieważny lub wygasł – ponawiam logowanie…")
+            auth = await _fresh_login()
+        try:
+            await _fetch_coros_data(auth, gs_map, debug_log)
+        except ValueError as e:
+            if "invalid" in str(e).lower() or "token" in str(e).lower():
+                print(f"  Błąd tokenu podczas pobierania: {e} – ponawiam logowanie…")
+                auth = await _fresh_login()
+                if auth:
+                    await _fetch_coros_data(auth, gs_map, debug_log)
+            else:
+                debug_log.append(f"Coros API error: {e}")
+                print(f"Coros API error: {e}")
     else:
         print("Pomijam Coros API (brak autoryzacji).")
 
-    # 5. Build output (final, with Coros data if available)
+    # Build output (final, with Coros data if available)
     _build_output(gs_map, debug_log)
 
 
