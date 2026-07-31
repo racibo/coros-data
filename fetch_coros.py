@@ -501,14 +501,14 @@ async def _fetch_coros_data(auth: StoredAuth, gs_map: dict, debug_log: list[str]
     # Only use cached mobile token – never do a full login (would invalidate phone session)
     mobile_base = MOBILE_BASE_URLS.get(auth.region, MOBILE_BASE_URLS["eu"])
     has_mobile = auth.mobile_access_token is not None
-    if not has_mobile:
-        # Try refreshing from cached payload without re-entering credentials
-        if auth.mobile_login_payload:
-            try:
-                from coros_api import _refresh_mobile_token
-                has_mobile = await _refresh_mobile_token(auth)
-            except Exception:
-                pass
+    # Refresh mobile token from cached payload if we have one (handles expired/stale tokens)
+    if auth.mobile_login_payload:
+        try:
+            from coros_api import _refresh_mobile_token
+            if await _refresh_mobile_token(auth):
+                has_mobile = True
+        except Exception:
+            pass
     if not has_mobile:
         dbg("  WARN: no mobile token (phone might not be logged in). Skipping steps/HR/RHR.")
 
